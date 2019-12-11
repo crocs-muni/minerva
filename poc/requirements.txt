@@ -1,0 +1,7 @@
+numpy
+scipy
+Cython
+cysignals
+fpylll
+pyscard
+asn1crypto

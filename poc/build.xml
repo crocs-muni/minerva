@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project basedir="." default="build" name="POC">
+
+  <property name="SDK_PATH" value="ext"/>
+  <property name="JC222" value="${SDK_PATH}/jc222_kit"/>
+
+  <taskdef name="javacard" classname="pro.javacard.ant.JavaCard" classpath="ext/ant-javacard.jar"/>
+
+  <target name="init">
+    <mkdir dir="build"/>
+  </target>
+
+  <target name="build" depends="init" description="Build the applet.">
+    <javacard jckit="${JC222}">
+      <cap output="build/poc_applet.cap" sources="applet/cz/crcs/ectester/poc" aid="4d696e657276612d706f63">
+        <applet class="cz.crcs.ectester.poc.POCApplet" aid="4d696e657276612d706f632e636170"/>
+      </cap>
+    </javacard>
+    <javacard jckit="${JC222}">
+      <cap output="build/collect_applet.cap" sources="applet/cz/crcs/ectester/poc" aid="4d696e657276612d636f6c">
+        <applet class="cz.crcs.ectester.poc.CollectApplet" aid="4d696e657276612d636f6c2e636170"/>
+      </cap>
+    </javacard>
+  </target>
+
+  <target name="clean">
+    <delete dir="build"/>
+  </target>
+
+  <target name="help">
+  	<echo message="Available targets:"/>
+  	<echo message=" - build - Builds the applet."/>
+  	<echo message=" - clean - Cleans the project."/> 
+  </target>
+
+</project>

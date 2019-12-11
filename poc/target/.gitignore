@@ -1,0 +1,4 @@
+*.a
+*.o
+matrixssl/
+*_target
