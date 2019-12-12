@@ -25,3 +25,5 @@ Time is in nanoseconds. All of the datasets contain 50 000 signatures.
  on Linux. Exhibits bit-length leakage as well as Hamming weight leakage.
  - **WolfCrypt**: [data_wolfcrypt.csv](data_wolfcrypt.csv) ECDSA on secp256r1 using SHA-1. Was measured
  on Linux. Exhibits very small bit-length-like leakage.
+ - **Simulated**: [data_sim.csv](data_sim.csv) ECDSA on secp256r1 using SHA-1. Was simulated with no noise.
+ Exhibits exact bit-length leakage.
