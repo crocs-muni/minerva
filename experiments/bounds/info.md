@@ -15,20 +15,31 @@ D = {50, 52, ..., 140}
  - The number of signatures used:
 N = {500, 600, ..., 7000, 8000, 9000, 10000}
 
- - The constant bounds:
-L = {2,3,4}
+ - The bounds type:
+   * The constant bounds:
+   L = {2,3,4}
 
- - The geometricD bounds:
-G = {2,3,4,5}
+   * The geometricD bounds:
+   G = {2,3,4,5}
 
- - The geometricN bounds (only one type)
+   * The geometricN bounds (only one type)
+   
+   * The known bounds (with or without recentering)
+   
+   * The templated bounds (with \(\alpha \in \{0.01, 0.1, 0.3\} = A\))
 
  - The data source:
 data = {sw, card, sim}
 
  - For each \( (n,d) \) run 5 times, random sampling \( n \in N \) signatures, constructing lattice from \(d \in D\) shortest, then either doing constant bounds with \(l \in L\) or geometricD bounds with \( g_0 \in G\), or geometricN bounds. Doing SVP with progressive BKZ (betas: 15, 20, 30, 40, 45, 48, 51, 53, 55).
 
-3 * [(3 * 68 * 45) + (4 * 68 * 45) + (1 * 68 * 45)]
+
+3 * //datatests
+[(3 * 68 * 45) + //constant bounds
+ (4 * 68 * 45) + //geometricD bounds
+ (1 * 68 * 45) + //geometricN bounds
+ (2 * 68 * 45) + //known bounds
+ (3 * 68 * 45)]  //templated bounds
 
 ```
 for data in {sw, card, sim}
@@ -38,13 +49,18 @@ for data in {sw, card, sim}
 	            schedule one const task with (l, n, d)
 	        for g0 in G
 	            schedule one geom task with (g0, n, d)
+            schedule one geomN task with (n, d)
+            schedule one known task with (n, d)
+            schedule one knownre task with (n, d)
+            for alpha in A
+                schedule one template task with (alpha, n, d)
 ```
 
 
 ### Outputs
-Each task outputs {sw,card,sim}\_{geom[2-5],const[2-4]}\_{n}\_{d}.csv with 5 lines for the 5 runs:
+Each task outputs {sw,card,sim}\_{geom[2-5],const[2-4],geomN,known,knownre,template[01,10,30]}\_{n}\_{d}.csv with 5 lines for the 5 runs:
 
-`seed, success, duration, last_reduction_step, info, #liars, real_info, bad_info, good_info`
+`seed, success, duration, last_reduction_step, info, #liars, real_info, bad_info, good_info[,liar_positions,result_normdist,result_row]`
 
 ### Visualizations
 For both real and sim data:

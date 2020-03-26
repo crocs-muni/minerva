@@ -22,7 +22,7 @@ function run_atk
     echo "$argv[4]" > $temp
     for i in (seq 5)
         set start (date +%s)
-        set out (./poc/attack/attack.py $argv[1] $argv[2] $argv[3] -p $temp)
+        set out ($EXPERIMENT_DIR/poc/attack/attack.py $argv[1] $argv[2] $argv[3] -p $temp)
         set stop (date +%s)
         set duration (math $stop - $start)
         if echo $out | grep -q "PRIVATE"
@@ -53,10 +53,10 @@ function run_atk
 end
 
 function get_fname
-    echo "/storage/brno2/home/j08ny/minerva/experiments/bounds/run/$argv[1]_$argv[2]_$argv[3]_$argv[4].csv"
+    echo "$EXPERIMENT_DIR/run/$argv[1]_$argv[2]_$argv[3]_$argv[4].csv"
 end
 
-set params (cat ./poc/attack/params.json | jq ".attack.num = $n | .dimension = $d")
+set params (cat $EXPERIMENT_DIR/poc/attack/params.json | jq ".attack.num = $n | .dimension = $d")
 
 if string match -r "const\(.*\)" "$bounds"
     # run const with the diff ls

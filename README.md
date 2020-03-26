@@ -16,3 +16,8 @@ target apps using the vulnerable libraries.
 ## Tester
 
 The tester uses ECDH to test presence of bit-length timing leakage using a custom JavaCard applet.
+
+## Data & Experiments
+
+The `data` directory contains the datasets collected for the paper. The experiments directory
+contains experiments run on the Metacentrum grid computing network.

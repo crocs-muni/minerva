@@ -14,11 +14,9 @@ from pprint import pprint
 from threading import current_thread, Thread
 
 import numpy as np
-from ec import get_curve, Mod
+from .ec import get_curve, Mod
 from fpylll import LLL, BKZ, IntegerMatrix, GSO
-# from g6k.algorithms.bkz import pump_n_jump_bkz_tour as BKZ_Sieve
-# from g6k.siever import Siever
-# from g6k.utils.stats import SieveTreeTracer
+from g6k.siever import Siever
 from numpy.linalg import inv as matrix_inverse
 
 Signature = namedtuple("Signature", ("elapsed", "h", "t", "u", "r", "s", "sinv"))
@@ -32,13 +30,7 @@ DEFAULT_PARAMS = {
         "seed": None
     },
     "dimension": 90,  # How many signatures are used for the lattice, real dimension is +1.
-    "bounds": {  # Bounds on the MSB zero bits of the part of the minimal signatures.
-        16: 8,  # 16-th: 6 zero bits
-        8: 7,  # eight: 5 zero bits
-        4: 5,  # quarter: 4 zero bits
-        2: 4,  # half: 3 zero bits
-        1: 3,  # all: 2 zero bits
-    },
+    "bounds": {},
     "betas": [15, 20, 30, 40, 45, 48, 51, 53, 55],  # BKZ block size progression.
 }
 
@@ -171,6 +163,14 @@ class Solver(Thread):
             return True
         return False
 
+    def verify_sieve(self, lattice, lifts):
+        for i, norm, coeffs in lifts:
+            v  = self.vector_from_coeffs(lattice, coeffs)
+            guess = v[-2] % self.curve.group.n
+            if self._try_guess(guess, pubkey):
+                return i, v
+        return None
+
     def verify_shortest(self, lattice, pubkey):
         for i, row in enumerate(lattice):
             guess = row[-2] % self.curve.group.n
@@ -240,7 +240,6 @@ class Solver(Thread):
             for k, v in templates.items():
                 for i in range(*v):
                     self.bounds[i] = self.curve.group.n.bit_length() - int(k)
-        print(self.bounds, file=sys.stderr)
 
         bnds = [self.bounds[i] for i in range(dim)]
         info = sum(bnds)
@@ -277,12 +276,24 @@ class Solver(Thread):
             self.log("Bad method: {}".format(self.params["attack"]["method"]))
             return
 
+        if self.sieve:
+            g6k = Siever(lattice)
+            g6k.initialize_local(0, 0, dim)
+            g6k()
+            short = self.verify_sieve(lattice, g6k.best_lifts())
+            if short is not None:
+                i, res = short
+                self.log("Result row: {}".format(i))
+                norm = self.norm(res)
+                self.log("Result normdist: {}".format(norm))
+            return
+
         reds = [None] + self.params["betas"]
         for beta in reds:
             lattice = self.reduce_lattice(lattice, beta)
             gso = GSO.Mat(lattice)
             gso.update_gso()
-            if (self.svp or self.sieve):
+            if self.svp:
                 short = self.verify_shortest(lattice, self.pubkey)
                 if short is not None:
                     i, res = short
@@ -371,10 +382,6 @@ if __name__ == "__main__":
         random.seed(seed)
         signatures = random.sample(signatures, args.params["attack"]["num"])
     print("[*] Using {} signatures.".format(len(signatures)))
-
-    if len(signatures) < args.params["attack"]["start"]:
-        print("[x] The number of signatures is less than required by the parameters,"
-              " the attack might not be successful.")
 
     found = False
 
