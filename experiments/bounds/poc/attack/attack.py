@@ -14,7 +14,7 @@ from pprint import pprint
 from threading import current_thread, Thread
 
 import numpy as np
-from .ec import get_curve, Mod
+from ec import get_curve, Mod
 from fpylll import LLL, BKZ, IntegerMatrix, GSO
 from g6k.siever import Siever
 from numpy.linalg import inv as matrix_inverse

@@ -1,10 +1,16 @@
 #!/usr/bin/env fish
 
+if [ (count $argv) -ne 1 ]
+    echo "Must specify bounds type." >&2
+    exit 1
+end
+set bounds $argv[1]
+
 set EXPERIMENT_DIR "$ARTIFACT_DIR/experiments/bounds"
 set task "$EXPERIMENT_DIR/task.sh"
 
-export $ARTIFACT_DIR
-epxort $EXPERIMENT_DIR
+export ARTIFACT_DIR
+export EXPERIMENT_DIR
 for data in "sim" "sw" "card"
     if [ "$data" = "card" ]
         set hash "sha256"
@@ -20,7 +26,7 @@ for data in "sim" "sw" "card"
         set walltime "00:$d:00"
         for n in (seq 500 100 7000) (seq 8000 1000 10000)
             echo $data $n $d
-            qsub -v ARTIFACT_DIR,EXPERIMENT_DIR -N minerva_card_geomN_""$n""_$d -l select=1:ncpus=1:mem=1gb -l walltime=$walltime -- $task $data secp256r1 $hash $ARTIFACT_DIR/data/$fname "geomN" $n $d
+            qsub -v ARTIFACT_DIR,EXPERIMENT_DIR -W umask=002 -W group_list=crocs -N minerva_""$data""_""$bounds""_""$n""_$d -e $EXPERIMENT_DIR/logs -o $EXPERIMENT_DIR/logs -l select=1:ncpus=1:mem=1gb -l walltime=$walltime -- $task $data secp256r1 $hash $ARTIFACT_DIR/data/$fname $bounds $n $d
         end
     end
 end

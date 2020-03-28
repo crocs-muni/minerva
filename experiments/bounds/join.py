@@ -57,7 +57,7 @@ def load_transformed(fname):
 
 
 if __name__ == "__main__":
-    all_runs = set()
+    all_runs = load_transformed("runs.pickle")
     d_list = list(range(50, 142, 2))
     n_list = list(it.chain(range(500, 7100, 100), range(8000, 11000, 1000)))
     for data in ("sw", "card", "sim"):
