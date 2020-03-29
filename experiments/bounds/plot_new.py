@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 import argparse
 import itertools as it
+from copy import copy
 from math import sqrt, ceil
+import re
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import cm, gridspec
+from matplotlib.colors import Normalize
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter)
 
 from join import load_transformed, AttackRun
@@ -171,6 +174,40 @@ def map2liarpos(data, dim):
     return liar_indices
 
 
+def map2liardepth(data, dim):
+    liar_indices = [0 for _ in range(dim)]
+    liar_counts = [0 for _ in range(dim)]
+    for run in data:
+        if run.d == dim:
+            liar_positions = run.liar_positions
+            if liar_positions:
+                liars = liar_positions.split(";")
+                for liar in liars:
+                    i, j = liar.split("@")
+                    i = int(i)
+                    j = int(j)
+                    liar_indices[i] += j
+                    liar_counts[i] += 1
+    for i in range(dim):
+        if liar_counts[i] != 0:
+            liar_indices[i] /= liar_counts[i]
+    return liar_indices
+
+def map2liarinfo(data, dim):
+    liar_indices = [0 for _ in range(dim)]
+    for run in data:
+        if run.d == dim:
+            liar_positions = run.liar_positions
+            if liar_positions:
+                liars = liar_positions.split(";")
+                for liar in liars:
+                    i, j = liar.split("@")
+                    i = int(i)
+                    j = int(j)
+                    liar_indices[i] += j
+    return liar_indices
+
+
 def map2blocks(data):
     vals = {}
     cnts = {}
@@ -250,13 +287,17 @@ def plot_heatmap(datas, fig, map_func, zlabel, flat=True):
         axes.append(ax)
         x, y, z, min_n = map_func(data)
         X, Y, Z = reshape_grid(x, y, z, n_list, d_list)
+        cmap = copy(cm.get_cmap("viridis"))
+        cmap.set_under("black")
+        #norm = Normalize(vmin=0.0001)
+        norm = None
         if flat:
-            im = ax.pcolormesh(X, Y, Z, cmap=cm.get_cmap("viridis"))
+            im = ax.pcolormesh(X, Y, Z, cmap=cmap, norm=norm)
             if min_n is not None:
                 ax.axvline(x=min_n, label="{}".format(min_n), color="red")
             fig.colorbar(im)
         else:
-            ax.plot_surface(X, Y, Z, cmap=cm.get_cmap("viridis"))
+            ax.plot_surface(X, Y, Z, cmap=cmap, norm=norm)
             ax.set_zlabel(zlabel)
         ax.set_xlabel("Number of signatures (N)")
         ax.set_ylabel("Dimension of matrix (D)")
@@ -309,8 +350,12 @@ if __name__ == "__main__":
         plot_heatmap(datas, fig, map2realinfo, "real info", flat=args.flat)
     elif figure == "success_avg":
         plot_toN(datas, fig, map2success_avg, "Successes")
-    elif figure == "liarpos":
-        plot_dim(datas, fig, map2liarpos, 140, "liar amount")
+    elif dim_match := re.match("liarpos\(([0-9]+)\)", figure):
+        plot_dim(datas, fig, map2liarpos, int(dim_match.group(1)), "liar amount")
+    elif dim_match := re.match("liardepth\(([0-9]+)\)", figure):
+        plot_dim(datas, fig, map2liardepth, int(dim_match.group(1)), "liar depth (average)")
+    elif dim_match := re.match("liarinfo\(([0-9]+)\)", figure):
+        plot_dim(datas, fig, map2liarinfo, int(dim_match.group(1)), "liar info")
     else:
         print("Unknown figure.")
         exit(1)
