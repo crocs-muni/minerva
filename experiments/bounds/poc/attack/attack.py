@@ -99,7 +99,7 @@ class Solver(Thread):
         return b
 
     def build_svp_lattice(self, signatures, dim, bounds):
-        re_value = self.curve.group.n if self.params["bounds"]["type"] == "known_re" else 0
+        re_value = self.curve.group.n if self.params["bounds"]["type"] == "knownre" else 0
         b = IntegerMatrix(dim + 2, dim + 2)
         for i in range(dim):
             b[i, i] = (2 ** self.bound_func(i, dim, bounds)) * self.curve.group.n
@@ -110,7 +110,7 @@ class Solver(Thread):
         return b
 
     def build_target(self, signatures, dim, bounds):
-        re_value = self.curve.group.n if self.params["bounds"]["type"] == "known_re" else 0
+        re_value = self.curve.group.n if self.params["bounds"]["type"] == "knownre" else 0
         return [(2 ** self.bound_func(i, dim, bounds)) * signatures[i][1] + re_value for i in
                 range(dim)] + [0]
 
@@ -231,7 +231,7 @@ class Solver(Thread):
         elif self.params["bounds"]["type"] == "geomN":
             self.bounds = [self.geomN_bound_func(i, len(self.signatures)) for i in range(dim)]
         elif self.params["bounds"]["type"] == "known" or self.params["bounds"][
-            "type"] == "known_re":
+            "type"] == "knownre":
             self.bounds = [self.known_bound_func(i, dim) for i in range(dim)]
         elif self.params["bounds"]["type"] == "template":
             self.bounds = [0 for _ in range(dim)]
@@ -385,23 +385,18 @@ if __name__ == "__main__":
 
     found = False
 
-
     def solution(skey):
         global found
         found = True
 
-
     print("[ ] Starting attack.")
-    if args.params["attack"]["type"] in ("full", "random"):
-        signatures.sort()
-        solver = Solver(curve, signatures, full_signatures, pubkey, args.params,
-                        solution, privkey)
-        try:
-            solver.run()
-        except KeyboardInterrupt:
-            pass
-        print("[*] Finished attack.")
-    else:
+    signatures.sort()
+    solver = Solver(curve, signatures, full_signatures, pubkey, args.params,
+                    solution, privkey)
+    try:
+        solver.run()
+    except KeyboardInterrupt:
         pass
+    print("[*] Finished attack.")
     if not found:
         exit(1)

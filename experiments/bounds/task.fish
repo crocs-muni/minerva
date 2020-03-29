@@ -28,7 +28,7 @@ function run_atk
         if echo $out | grep -q "PRIVATE"
             set found 1
             set result_row (echo $out | grep -o "Result row: [0-9]*" | grep -o "[0-9]*")
-            set result_normdist (echo $out | grep -o "Result normdist: [0-9\\.]*" | cut -d" " -f 3)
+            set result_normdist (echo $out | grep -o "Result normdist: [0-9\\.e+]*" | cut -d" " -f 3)
         else
             set found 0
             set result_row 0
@@ -58,18 +58,18 @@ end
 
 set params (cat $EXPERIMENT_DIR/poc/attack/params.json | jq ".attack.num = $n | .dimension = $d")
 
-if string match -r "const\(.*\)" "$bounds"
+if string match -r "const[0-9,]+" "$bounds"
     # run const with the diff ls
-    set l (string match -r "\((.*)\)" "$bounds" | tail -n1)
+    set l (string match -r "[0-9,]+" "$bounds" | tail -n1)
     for bound in (string split "," $l)
         set params (echo $params | jq ".bounds = {\"type\": \"constant\", \"value\": $bound}")
         set fname (get_fname $data "const$bound" $n $d)
         echo "Running const$bound"
         run_atk "$curve" "$hash" "$input" "$params" > $fname
     end
-else if string match -r "geom\(.*\)" "$bounds"
+else if string match -r "geom[0-9,]+" "$bounds"
     # run geom with the diff ls
-    set l (string match -r "\((.*)\)" "$bounds" | tail -n1)
+    set l (string match -r "[0-9,]+" "$bounds" | tail -n1)
     for bound in (string split "," $l)
         set p1 "$bound"
         set p2 (math "$bound" + 1)
@@ -95,14 +95,14 @@ else if string match -r "known" "$bounds"
     set fname (get_fname $data "known" $n $d)
     echo "Running known"
     run_atk "$curve" "$hash" "$input" "$params" > $fname
-else if string match -r "known_re" "$bounds"
-    set params (echo $params | jq ".bounds = {\"type\": \"known_re\"}")
+else if string match -r "knownre" "$bounds"
+    set params (echo $params | jq ".bounds = {\"type\": \"knownre\"}")
     set fname (get_fname $data "knownre" $n $d)
     echo "Running knownre"
     run_atk "$curve" "$hash" "$input" "$params" > $fname
-else if string match -r "template\(.*\)" "$bounds"
+else if string match -r "template[0-9,]+" "$bounds"
     # alpha is a percent
-    set alpha (string match -r "\((.*)\)" "$bounds" | tail -n1)
+    set alpha (string match -r "[0-9,]+" "$bounds" | tail -n1)
     set temp_bounds (cat $data.json | jq ".\"$alpha\".\"$d\".\"$n\"")
     set params (echo $params | jq ".bounds = $temp_bounds")
     set params (echo $params | jq ".bounds.type = \"template\"")

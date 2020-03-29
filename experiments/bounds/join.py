@@ -2,7 +2,7 @@
 from collections import namedtuple
 import pickle
 import itertools as it
-from os.path import join
+from os.path import join, exists
 from glob import glob
 import csv
 
@@ -52,12 +52,14 @@ def save_transformed(all_runs, fname):
 
 
 def load_transformed(fname):
+    if not exists(fname):
+        return set()
     with open(fname, "rb") as f:
         return pickle.load(f)
 
 
 if __name__ == "__main__":
-    all_runs = load_transformed("runs.pickle")
+    all_runs = load_transformed("results/runs.pickle")
     d_list = list(range(50, 142, 2))
     n_list = list(it.chain(range(500, 7100, 100), range(8000, 11000, 1000)))
     for data in ("sw", "card", "sim"):
@@ -66,4 +68,4 @@ if __name__ == "__main__":
             print(data, bounds, len(loaded))
             all_runs.update(loaded)
             print(len(all_runs))
-    save_transformed(all_runs, "runs.pickle")
+    save_transformed(all_runs, "results/runs.pickle")

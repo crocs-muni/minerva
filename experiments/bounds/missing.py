@@ -14,7 +14,7 @@ if __name__ == "__main__":
 
     data_types = args.data.split(",")
     bound_types = args.bounds.split(",")
-    runs = load_transformed("runs.pickle")
+    runs = load_transformed("results/runs.pickle")
     present = set()
     for run in runs:
         if run.dataset in data_types and run.bounds in bound_types:

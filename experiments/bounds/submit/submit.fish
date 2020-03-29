@@ -26,7 +26,8 @@ for data in "sim" "sw" "card"
         set walltime "00:$d:00"
         for n in (seq 500 100 7000) (seq 8000 1000 10000)
             echo $data $n $d
-            qsub -v ARTIFACT_DIR,EXPERIMENT_DIR -W umask=002 -W group_list=crocs -N minerva_""$data""_""$bounds""_""$n""_$d -e $EXPERIMENT_DIR/logs -o $EXPERIMENT_DIR/logs -l select=1:ncpus=1:mem=1gb -l walltime=$walltime -- $task $data secp256r1 $hash $ARTIFACT_DIR/data/$fname $bounds $n $d
+            set task_name minerva_""$data""_""$bounds""_""$n""_$d
+            qsub -v ARTIFACT_DIR,EXPERIMENT_DIR -W umask=002 -W group_list=crocs -N $task_name -e $EXPERIMENT_DIR/logs/$task_name.err -o $EXPERIMENT_DIR/logs/$task_name.out -l select=1:ncpus=1:mem=1gb -l walltime=$walltime -- $task $data secp256r1 $hash $ARTIFACT_DIR/data/$fname $bounds $n $d
         end
     end
 end

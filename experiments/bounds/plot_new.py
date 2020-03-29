@@ -88,7 +88,7 @@ def map2normdist(data):
         key = (run.N, run.d)
         vals.setdefault(key, 0)
         cnts.setdefault(key, 0)
-        if run.success:
+        if run.success and run.normdist is not None:
             vals[key] += run.normdist
             cnts[key] += 1
     for key in vals:
@@ -105,7 +105,7 @@ def map2row(data):
         key = (run.N, run.d)
         vals.setdefault(key, 0)
         cnts.setdefault(key, 0)
-        if run.success:
+        if run.success and run.row is not None:
             vals[key] += run.row
             cnts[key] += 1
     for key in vals:
@@ -114,22 +114,36 @@ def map2row(data):
     N, D, S = remap(vals, 0)
     return N, D, S, None
 
-
-def map2liars(data):
+def _map2single(data, attr):
     vals = {}
     cnts = {}
     for run in data:
         key = (run.N, run.d)
         vals.setdefault(key, 0)
         cnts.setdefault(key, 0)
-        vals[key] += run.liars
+        vals[key] += getattr(run, attr)
         cnts[key] += 1
     for key in vals:
         if cnts[key] != 0:
             vals[key] /= cnts[key]
-    N, D, S = remap(vals, 0)
-    return N, D, S, None
+    N, D, V = remap(vals, 0)
+    return N, D, V, None
 
+
+def map2liars(data):
+    return _map2single(data, "liars")
+
+def map2info(data):
+    return _map2single(data, "info")
+
+def map2realinfo(data):
+    return _map2single(data, "real_info")
+
+def map2goodinfo(data):
+    return _map2single(data, "good_info")
+
+def map2badinfo(data):
+    return _map2single(data, "bad_info")
 
 def map2success_avg(data):
     res = {n: 0 for n in n_list}
@@ -237,9 +251,10 @@ def plot_heatmap(datas, fig, map_func, zlabel, flat=True):
         x, y, z, min_n = map_func(data)
         X, Y, Z = reshape_grid(x, y, z, n_list, d_list)
         if flat:
-            ax.pcolormesh(X, Y, Z, cmap=cm.get_cmap("viridis"))
+            im = ax.pcolormesh(X, Y, Z, cmap=cm.get_cmap("viridis"))
             if min_n is not None:
                 ax.axvline(x=min_n, label="{}".format(min_n), color="red")
+            fig.colorbar(im)
         else:
             ax.plot_surface(X, Y, Z, cmap=cm.get_cmap("viridis"))
             ax.set_zlabel(zlabel)
@@ -257,24 +272,47 @@ if __name__ == "__main__":
     parser.add_argument("--data", type=str, required=True)
     parser.add_argument("--bounds", type=str, required=True)
     parser.add_argument("--flat", action="store_true")
+    parser.add_argument("figure", type=str)
 
     args = parser.parse_args()
     figsize = tuple(map(float, args.figsize.split("x")))
     data_types = args.data.split(",")
     bound_types = args.bounds.split(",")
+    figure = args.figure
 
-    runs = load_transformed("runs.pickle")
+    runs = load_transformed("results/runs.pickle")
     fig = plt.figure(figsize=figsize)
     datas = {}
     for run in runs:
         if run.dataset in data_types and run.bounds in bound_types:
             s = datas.setdefault(run.dataset + "_" + run.bounds, set())
             s.add(run)
-    # plot_heatmap(datas, fig, map2success, "Successes (out of 5)", flat=args.flat)
-    # plot_heatmap(datas, fig, map2normdist, "Normdist", flat=args.flat)
-    # plot_heatmap(datas, fig, map2row, "Row", flat=args.flat)
-    # plot_heatmap(datas, fig, map2liars, "Liars", flat=args.flat)
-    # plot_toN(datas, fig, map2success_avg, "Successes")
-    plot_dim(datas, fig, map2liarpos, 140, "liar amount")
+    if figure == "success":
+        plot_heatmap(datas, fig, map2success, "Successes (out of 5)", flat=args.flat)
+    elif figure == "normdist":
+        plot_heatmap(datas, fig, map2normdist, "Normdist", flat=args.flat)
+    elif figure == "row":
+        plot_heatmap(datas, fig, map2row, "Row", flat=args.flat)
+    elif figure == "blocks":
+        plot_heatmap(datas, fig, map2blocks, "Block size", flat=args.flat)
+    elif figure == "runtime":
+        plot_heatmap(datas, fig, map2runtime, "Runtime (s)", flat=args.flat)
+    elif figure == "liars":
+        plot_heatmap(datas, fig, map2liars, "Liars", flat=args.flat)
+    elif figure == "info":
+        plot_heatmap(datas, fig, map2info, "info", flat=args.flat)
+    elif figure == "goodinfo":
+        plot_heatmap(datas, fig, map2goodinfo, "good info", flat=args.flat)
+    elif figure == "badinfo":
+        plot_heatmap(datas, fig, map2badinfo, "bad info", flat=args.flat)
+    elif figure == "realinfo":
+        plot_heatmap(datas, fig, map2realinfo, "real info", flat=args.flat)
+    elif figure == "success_avg":
+        plot_toN(datas, fig, map2success_avg, "Successes")
+    elif figure == "liarpos":
+        plot_dim(datas, fig, map2liarpos, 140, "liar amount")
+    else:
+        print("Unknown figure.")
+        exit(1)
     fig.tight_layout()
     plt.show()
