@@ -17,7 +17,7 @@ from bisect import bisect
 import numpy as np
 from ec import get_curve, Mod
 from fpylll import LLL, BKZ, IntegerMatrix, GSO
-from g6k.siever import Siever
+from g6k.siever import Siever, SaturationError
 from numpy.linalg import inv as matrix_inverse
 
 Signature = namedtuple("Signature", ("elapsed", "h", "t", "u", "r", "s", "sinv"))
@@ -133,12 +133,12 @@ class Solver(Thread):
                                                   map(lambda x: int(round(x)), coeffs)) * lattice)[
                          0])
 
-    def babai(self, lattice, gso, target):
+    def babai_np(self, lattice, gso, target):
         self.log("Start Babai's Nearest Plane.")
         combs = gso.babai(target)
         return self.vector_from_coeffs(combs, lattice)
 
-    def round(self, lattice, target):
+    def babai_round(self, lattice, target):
         self.log("Start Babai's Rounding.")
         b = np.empty((lattice.nrows, lattice.ncols), "f8")
         lattice.to_matrix(b)
@@ -281,11 +281,12 @@ class Solver(Thread):
 
         self.svp = self.params["attack"]["method"] == "svp"
         self.sieve = self.params["attack"]["method"] == "sieve"
-        self.cvp = self.params["attack"]["method"] == "cvp"
+        self.np = self.params["attack"]["method"] == "np"
+        self.round = self.params["attack"]["method"] == "round"
 
         if self.svp or self.sieve:
             lattice = self.build_svp_lattice(pairs, dim, self.params["bounds"])
-        elif self.cvp:
+        elif self.np or self.round:
             lattice = self.build_cvp_lattice(pairs, dim, self.params["bounds"])
             target = self.build_target(pairs, dim, self.params["bounds"])
         else:
@@ -293,9 +294,14 @@ class Solver(Thread):
             return
 
         if self.sieve:
+            self.reduce_lattice(lattice, None)
             g6k = Siever(lattice)
+            self.log("Start SIEVE.")
             g6k.initialize_local(0, 0, dim)
-            g6k()
+            try:
+                g6k()
+            except SaturationError as e:
+                pass
             short = self.verify_sieve(lattice, g6k.best_lifts())
             if short is not None:
                 i, res = short
@@ -318,14 +324,16 @@ class Solver(Thread):
                     self.log("Result normdist: {}".format(norm))
                     break
 
-            if self.cvp:
-                # closest = self.round(lattice, target)
-                # if self.verify_closest(closest, self.pubkey):
-                #   break
+            if self.round:
+                closest = self.babai_round(lattice, target)
+                if self.verify_closest(closest, self.pubkey):
+                    dist = self.dist(closest, target)
+                    self.log("Result normdist: {}".format(dist))
+                    break
 
-                closest = self.babai(lattice, gso, target)
-                close = self.verify_closest(closest, self.pubkey)
-                if close is not None:
+            if self.np:
+                closest = self.babai_np(lattice, gso, target)
+                if self.verify_closest(closest, self.pubkey) is not None:
                     dist = self.dist(closest, target)
                     self.log("Result normdist: {}".format(dist))
                     break

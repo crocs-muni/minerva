@@ -27,3 +27,5 @@ The `present.py` is a script for listing the contents of the `results/runs.pickl
 Use `plot_new.py` for plotting.  
 
 ## Bounds
+
+## Methods

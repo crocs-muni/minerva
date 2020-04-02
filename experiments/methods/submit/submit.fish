@@ -1,12 +1,13 @@
 #!/usr/bin/env fish
 
-if [ (count $argv) -ne 1 ]
-    echo "Must specify bounds type." >&2
+if [ (count $argv) -ne 2 ]
+    echo "Must specify bounds and methods type." >&2
     exit 1
 end
 set bounds $argv[1]
+set method $argv[2]
 
-set EXPERIMENT_DIR "$ARTIFACT_DIR/experiments/bounds"
+set EXPERIMENT_DIR "$ARTIFACT_DIR/experiments/methods"
 set task "$EXPERIMENT_DIR/task.sh"
 
 export ARTIFACT_DIR
@@ -28,9 +29,9 @@ for data in "sim" "sw" "card" "tpm"
     for d in (seq 50 2 140)
         set walltime "00:$d:00"
         for n in (seq 500 100 7000) (seq 8000 1000 10000)
-            echo $data $bounds $n $d
-            set task_name minerva_""$data""_""$bounds""_""$n""_$d
-            qsub -v ARTIFACT_DIR,EXPERIMENT_DIR -W umask=002 -W group_list=crocs -N $task_name -e $EXPERIMENT_DIR/logs/$task_name.err -o $EXPERIMENT_DIR/logs/$task_name.out -l select=1:ncpus=1:mem=1gb:cl_adan=False -l walltime=$walltime -- $task $data secp256r1 $hash $ARTIFACT_DIR/data/$fname $bounds $n $d
+            echo $data $bounds $method $n $d
+            set task_name minerva_""$data""_""$bounds""_""$method""_""$n""_$d
+            qsub -v ARTIFACT_DIR,EXPERIMENT_DIR -W umask=002 -W group_list=crocs -N $task_name -e $EXPERIMENT_DIR/logs/$task_name.err -o $EXPERIMENT_DIR/logs/$task_name.out -l select=1:ncpus=1:mem=1gb:cl_adan=False -l walltime=$walltime -- $task $data secp256r1 $hash $ARTIFACT_DIR/data/$fname $bounds $method $n $d
         end
     end
 end

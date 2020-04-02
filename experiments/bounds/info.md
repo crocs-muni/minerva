@@ -10,17 +10,17 @@ Geometric bounds are better. If the Brumley&Tuveri method is used, even in the p
 ### Setup
 
  - The dimensions:
-D = {50, 52, ..., 140}
+ D = {50, 52, ..., 140}
 
  - The number of signatures used:
-N = {500, 600, ..., 7000, 8000, 9000, 10000}
+ N = {500, 600, ..., 7000, 8000, 9000, 10000}
 
  - The bounds type:
    * The constant bounds:
-   L = {2,3,4}
+   L = {1,2,3,4}
 
    * The geometricD bounds:
-   G = {2,3,4,5}
+   G = {1,2,3,4}
 
    * The geometricN bounds (only one type)
    
@@ -29,36 +29,15 @@ N = {500, 600, ..., 7000, 8000, 9000, 10000}
    * The templated bounds (with \(\alpha \in \{0.01, 0.1, 0.3\} = A\))
 
  - The data source:
-data = {sw, card, sim}
+ data = {sw, card, sim, tpm}
 
- - For each \( (n,d) \) run 5 times, random sampling \( n \in N \) signatures, constructing lattice from \(d \in D\) shortest, then either doing constant bounds with \(l \in L\) or geometricD bounds with \( g_0 \in G\), or geometricN bounds. Doing SVP with progressive BKZ (betas: 15, 20, 30, 40, 45, 48, 51, 53, 55).
-
-
-3 * //datatests
-[(3 * 68 * 45) + //constant bounds
- (4 * 68 * 45) + //geometricD bounds
- (1 * 68 * 45) + //geometricN bounds
- (2 * 68 * 45) + //known bounds
- (3 * 68 * 45)]  //templated bounds
-
-```
-for data in {sw, card, sim}
-    for d in D
-        for n in N
-        	for l in L
-	            schedule one const task with (l, n, d)
-	        for g0 in G
-	            schedule one geom task with (g0, n, d)
-            schedule one geomN task with (n, d)
-            schedule one known task with (n, d)
-            schedule one knownre task with (n, d)
-            for alpha in A
-                schedule one template task with (alpha, n, d)
-```
-
+ - For each \( (n,d) \) run 5 times, random sampling \( n \in N \) signatures,
+ constructing lattice from \(d \in D\) shortest, then either doing constant
+ bounds with \(l \in L\) or geometricD bounds with \( g_0 \in G\), or geometricN bounds.
+ Doing SVP with progressive BKZ (betas: 15, 20, 30, 40, 45, 48, 51, 53, 55).
 
 ### Outputs
-Each task outputs {sw,card,sim}\_{geom[2-5],const[2-4],geomN,known,knownre,template[01,10,30]}\_{n}\_{d}.csv with 5 lines for the 5 runs:
+Each task outputs {sw,card,sim,tpm}\_{geom[1-4],const[1-4],geomN,known,knownre,template[01,10,30]}\_{n}\_{d}.csv with 5 lines for the 5 runs:
 
 `seed, success, duration, last_reduction_step, info, #liars, real_info, bad_info, good_info[,liar_positions,result_normdist,result_row]`
 
@@ -70,40 +49,10 @@ For both real and sim data:
  - 3D plot, x:N, y:D, z: avg. duration of successful run; this for geom,const2,const3,const4.
  - 2D lineplot, x:N, y:sum over d in D (number of successed); all of geom,const2,const3,const4 in one plot.
 
-
 ### Why?
  - Gives a lot of insight into the parameter space.
  - Gives a good baseline for future experiments, can compare in different parts of the parameter space.
  - Shows superiority of out parameter choice of geometric distribution.
-
-
----
-
-## During
-
-
-### Run 25.09. 21:00
- - Some tasks failed to run, due to some CPython error (likely missing Cython?)
- or some weird architecture, or the fact that fpylll was likely compiled with
- march=native or mtune=native?
- - Some tasks had issues due to the use of fish shell to script the task run, when
- run in parallel it needs to lock and access some user specific files, which took
- too much time, sometimes timed out
- - Bad(incomplete) tasks will either not have resulting csv files, or those files will not have 5 lines or those lines will contain the regex "0,.,LLL", collect those and rerun.
-
-### Few reruns
-
- - First did a rerun of those tasks with "0,.,LLL" which failed due to a C runtime error in G6K native module. Then I actually fixed (recompiled G6K without -march=native) and rerun again.
- - Then also did a rerun for those tasks that were missing the results files, likely due to the above error or some other (ran out of time).
-
-### Few more reruns
- - Got it all.
-
----
-
-## After
-
-### Figures
 
 ### Conclusions
 
