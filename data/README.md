@@ -8,8 +8,8 @@ The data is in CSV-like format (only the first line is not CSV):
 <r2>,<s2>,<time2>
 ...
 <r>,<s>,<time>
-``` 
-Time is in nanoseconds. All of the datasets contain 50 000 signatures.
+```
+Time is in nanoseconds. All of the datasets contain at least 50 000 signatures.
 
 ## Datasets
 
@@ -27,3 +27,7 @@ Time is in nanoseconds. All of the datasets contain 50 000 signatures.
  on Linux. Exhibits very small bit-length-like leakage.
  - **Simulated**: [data_sim.csv](data_sim.csv) ECDSA on secp256r1 using SHA-1. Was simulated with no noise.
  Exhibits exact bit-length leakage.
+ - **TPM-FAIL**: [data_tpmfail_stm.csv](data_tpmfail_stm.csv) Data from the "TPM-FAIL:
+ TPM meets Timing and Lattice Attacks" paper by Moghimi, Sunar, Eisenbarth and Heninger at USENIX Security
+ Symposium 2020. ECDSA on secp256r1 using SHA-256. This is the data from the STM chip used in the paper.
+ Obtained from <https://github.com/vernamlab/TPM-FAIL>. Exhibits clear bit-length only leakage.

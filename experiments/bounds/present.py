@@ -6,7 +6,7 @@ d_list = list(range(50, 142, 2))
 n_list = list(it.chain(range(500, 7100, 100), range(8000, 11000, 1000)))
 
 if __name__ == "__main__":
-    data_types = ("sw", "card", "sim")
+    data_types = ("sw", "card", "sim", "tpm")
     bound_types = ("known", "knownre", "geom", "geom1", "geom2", "geom3", "geom4", "geomN", "const1", "const2", "const3", "const4", "template01", "template10", "template30", "templatem01", "templatem10", "templatem30")
     runs = load_transformed("results/runs.pickle")
     present = {}

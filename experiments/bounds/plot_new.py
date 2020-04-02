@@ -54,12 +54,12 @@ def sync_viewing(axes, fig):
     fig.canvas.mpl_connect("motion_notify_event", on_move)
 
 
-def remap(vals, default):
+def remap(vals, default, ns=n_list, ds=d_list):
     N = []
     D = []
     V = []
-    for n in n_list:
-        for d in d_list:
+    for n in ns:
+        for d in ds:
             N.append(n)
             D.append(d)
             key = (n, d)
@@ -163,15 +163,39 @@ def map2success_avg(data):
 
 def map2liarpos(data, dim):
     liar_indices = [0 for _ in range(dim)]
+    count = 0
     for run in data:
         if run.d == dim:
+            count += 1
             liar_positions = run.liar_positions
             if liar_positions:
                 liars = liar_positions.split(";")
                 for liar in liars:
                     i = int(liar.split("@")[0])
                     liar_indices[i] += 1
+    if count != 0:
+        liar_indices = [i/count for i in liar_indices]
     return liar_indices
+
+
+def map2liarpos_heat(data):
+    vals = {}
+    cnts = {}
+    for run in data:
+        cnts.setdefault(run.d, 0)
+        cnts[run.d] += 1
+        if run.liar_positions:
+            liars = run.liar_positions.split(";")
+            for liar in liars:
+                i = int(liar.split("@")[0])
+                key = (run.d, i)
+                vals.setdefault(key, 0)
+                vals[key] += 1
+    for key in vals:
+        if cnts[key[0]] != 0:
+            vals[key] /= cnts[key[0]]
+    N, D, V = remap(vals, 0, d_list, list(range(0, 50, 2)) + d_list)
+    return N, D, V, None
 
 
 def map2liardepth(data, dim):
@@ -193,10 +217,33 @@ def map2liardepth(data, dim):
             liar_indices[i] /= liar_counts[i]
     return liar_indices
 
+def map2liardepth_heat(data):
+    vals = {}
+    cnts = {}
+    for run in data:
+        if run.liar_positions:
+            liars = run.liar_positions.split(";")
+            for liar in liars:
+                i, j = liar.split("@")
+                i = int(i)
+                j = int(j)
+                key = (run.d, i)
+                vals.setdefault(key, 0)
+                cnts.setdefault(key, 0)
+                vals[key] += j
+                cnts[key] += 1
+    for key in vals:
+        if cnts[key] != 0:
+            vals[key] /= cnts[key]
+    N, D, V = remap(vals, 0, d_list, list(range(0, 50, 2)) + d_list)
+    return N, D, V, None
+
 def map2liarinfo(data, dim):
     liar_indices = [0 for _ in range(dim)]
+    count = 0
     for run in data:
         if run.d == dim:
+            count += 1
             liar_positions = run.liar_positions
             if liar_positions:
                 liars = liar_positions.split(";")
@@ -205,8 +252,30 @@ def map2liarinfo(data, dim):
                     i = int(i)
                     j = int(j)
                     liar_indices[i] += j
+    if count != 0:
+        liar_indices = [i/count for i in liar_indices]
     return liar_indices
 
+def map2liarinfo_heat(data):
+    vals = {}
+    cnts = {}
+    for run in data:
+        cnts.setdefault(run.d, 0)
+        cnts[run.d] += 1
+        if run.liar_positions:
+            liars = run.liar_positions.split(";")
+            for liar in liars:
+                i, j = liar.split("@")
+                i = int(i)
+                j = int(j)
+                key = (run.d, i)
+                vals.setdefault(key, 0)
+                vals[key] += j
+    for key in vals:
+        if cnts[key[0]] != 0:
+            vals[key] /= cnts[key[0]]
+    N, D, V = remap(vals, 0, d_list, list(range(0, 50, 2)) + d_list)
+    return N, D, V, None
 
 def map2blocks(data):
     vals = {}
@@ -275,7 +344,7 @@ def plot_dim(datas, fig, map_func, dim, ylabel):
     ax.legend()
 
 
-def plot_heatmap(datas, fig, map_func, zlabel, flat=True):
+def plot_heatmap(datas, fig, map_func, zlabel, flat=True, ns=n_list, ds=d_list, xlabel="Number of signatures (N)", ylabel="Dimension of matrix (D)"):
     gs = get_gridspec(datas)
     i = 0
     axes = []
@@ -286,7 +355,7 @@ def plot_heatmap(datas, fig, map_func, zlabel, flat=True):
             ax = fig.add_subplot(gs[i], projection="3d")
         axes.append(ax)
         x, y, z, min_n = map_func(data)
-        X, Y, Z = reshape_grid(x, y, z, n_list, d_list)
+        X, Y, Z = reshape_grid(x, y, z, ns, ds)
         cmap = copy(cm.get_cmap("viridis"))
         cmap.set_under("black")
         #norm = Normalize(vmin=0.0001)
@@ -299,8 +368,8 @@ def plot_heatmap(datas, fig, map_func, zlabel, flat=True):
         else:
             ax.plot_surface(X, Y, Z, cmap=cmap, norm=norm)
             ax.set_zlabel(zlabel)
-        ax.set_xlabel("Number of signatures (N)")
-        ax.set_ylabel("Dimension of matrix (D)")
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
         ax.set_title(name)
         i += 1
     if not flat:
@@ -350,6 +419,12 @@ if __name__ == "__main__":
         plot_heatmap(datas, fig, map2realinfo, "real info", flat=args.flat)
     elif figure == "success_avg":
         plot_toN(datas, fig, map2success_avg, "Successes")
+    elif figure == "liarpos":
+        plot_heatmap(datas, fig, map2liarpos_heat, "liar amount", flat=args.flat, ns=d_list, ds=list(range(0, 50, 2)) + d_list, xlabel="run.D", ylabel="D")
+    elif figure == "liardepth":
+        plot_heatmap(datas, fig, map2liardepth_heat, "liar depth(average)", flat=args.flat, ns=d_list, ds=list(range(0, 50, 2)) + d_list, xlabel="run.D", ylabel="D")
+    elif figure == "liarinfo":
+        plot_heatmap(datas, fig, map2liarinfo_heat, "liar info", flat=args.flat, ns=d_list, ds=list(range(0, 50, 2)) + d_list, xlabel="run.D", ylabel="D")
     elif dim_match := re.match("liarpos\(([0-9]+)\)", figure):
         plot_dim(datas, fig, map2liarpos, int(dim_match.group(1)), "liar amount")
     elif dim_match := re.match("liardepth\(([0-9]+)\)", figure):

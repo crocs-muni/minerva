@@ -12,6 +12,7 @@ from copy import copy
 from math import sqrt
 from pprint import pprint
 from threading import current_thread, Thread
+from bisect import bisect
 
 import numpy as np
 from ec import get_curve, Mod
@@ -215,6 +216,21 @@ class Solver(Thread):
         self.tried = set()
 
         dim = self.params["dimension"]
+
+        if self.params["bounds"]["type"] in ("known", "knownre"):
+            sigs = self.signatures
+            self.signatures = []
+            blens = []
+            for sig in sigs:
+                blen = int(self.recompute_nonce(sig)).bit_length()
+                i = bisect(blens, blen)
+                if i < dim:
+                    blens.insert(i, blen)
+                    self.signatures.insert(i, sig)
+                if len(blens) > dim:
+                    blens.pop()
+                    self.signatures.pop()
+
         pairs = [(sig.t, sig.u) for sig in self.signatures[:dim]]
         nonces = []
         for sig in self.signatures[:dim]:
