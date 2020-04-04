@@ -17,12 +17,15 @@ d_list = list(range(50, 142, 2))
 n_list = list(it.chain(range(500, 7100, 100), range(8000, 11000, 1000)))
 
 
-def get_gridspec(datas):
-    w = ceil(sqrt(len(datas)))
-    if len(datas) == 2:
-        gs = gridspec.GridSpec(2, 1)
+def get_gridspec(datas, grid):
+    if grid is None:
+        w = ceil(sqrt(len(datas)))
+        if len(datas) == 2:
+            gs = gridspec.GridSpec(2, 1)
+        else:
+            gs = gridspec.GridSpec(w, w)
     else:
-        gs = gridspec.GridSpec(w, w)
+        gs = gridspec.GridSpec(*grid)
     return gs
 
 
@@ -344,8 +347,8 @@ def plot_dim(datas, fig, map_func, dim, ylabel):
     ax.legend()
 
 
-def plot_heatmap(datas, fig, map_func, zlabel, flat=True, ns=n_list, ds=d_list, xlabel="Number of signatures (N)", ylabel="Dimension of matrix (D)"):
-    gs = get_gridspec(datas)
+def plot_heatmap(datas, fig, map_func, zlabel, flat=True, grid=None, ns=n_list, ds=d_list, xlabel="Number of signatures (N)", ylabel="Dimension of matrix (D)"):
+    gs = get_gridspec(datas, grid)
     i = 0
     axes = []
     for name, data in sorted(datas.items()):
@@ -379,6 +382,7 @@ def plot_heatmap(datas, fig, map_func, zlabel, flat=True, ns=n_list, ds=d_list, 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--figsize", type=str, default="7x4")
+    parser.add_argument("--grid", type=str)
     parser.add_argument("--data", type=str, required=True)
     parser.add_argument("--bounds", type=str, required=True)
     parser.add_argument("--methods", type=str, required=True)
@@ -387,6 +391,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     figsize = tuple(map(float, args.figsize.split("x")))
+    grid = tuple(map(int, args.grid.split("x"))) if args.grid else None
     data_types = args.data.split(",")
     bound_types = args.bounds.split(",")
     method_types = args.methods.split(",")
@@ -400,33 +405,33 @@ if __name__ == "__main__":
             s = datas.setdefault("_".join((run.dataset, run.bounds, run.method)), set())
             s.add(run)
     if figure == "success":
-        plot_heatmap(datas, fig, map2success, "Successes (out of 5)", flat=args.flat)
+        plot_heatmap(datas, fig, map2success, "Successes (out of 5)", flat=args.flat, grid=grid)
     elif figure == "normdist":
-        plot_heatmap(datas, fig, map2normdist, "Normdist", flat=args.flat)
+        plot_heatmap(datas, fig, map2normdist, "Normdist", flat=args.flat, grid=grid)
     elif figure == "row":
-        plot_heatmap(datas, fig, map2row, "Row", flat=args.flat)
+        plot_heatmap(datas, fig, map2row, "Row", flat=args.flat, grid=grid)
     elif figure == "blocks":
-        plot_heatmap(datas, fig, map2blocks, "Block size", flat=args.flat)
+        plot_heatmap(datas, fig, map2blocks, "Block size", flat=args.flat, grid=grid)
     elif figure == "runtime":
-        plot_heatmap(datas, fig, map2runtime, "Runtime (s)", flat=args.flat)
+        plot_heatmap(datas, fig, map2runtime, "Runtime (s)", flat=args.flat, grid=grid)
     elif figure == "liars":
-        plot_heatmap(datas, fig, map2liars, "Liars", flat=args.flat)
+        plot_heatmap(datas, fig, map2liars, "Liars", flat=args.flat, grid=grid)
     elif figure == "info":
-        plot_heatmap(datas, fig, map2info, "info", flat=args.flat)
+        plot_heatmap(datas, fig, map2info, "info", flat=args.flat, grid=grid)
     elif figure == "goodinfo":
-        plot_heatmap(datas, fig, map2goodinfo, "good info", flat=args.flat)
+        plot_heatmap(datas, fig, map2goodinfo, "good info", flat=args.flat, grid=grid)
     elif figure == "badinfo":
-        plot_heatmap(datas, fig, map2badinfo, "bad info", flat=args.flat)
+        plot_heatmap(datas, fig, map2badinfo, "bad info", flat=args.flat, grid=grid)
     elif figure == "realinfo":
-        plot_heatmap(datas, fig, map2realinfo, "real info", flat=args.flat)
+        plot_heatmap(datas, fig, map2realinfo, "real info", flat=args.flat, grid=grid)
     elif figure == "success_avg":
         plot_toN(datas, fig, map2success_avg, "Successes")
     elif figure == "liarpos":
-        plot_heatmap(datas, fig, map2liarpos_heat, "liar amount", flat=args.flat, ns=d_list, ds=list(range(0, 50, 2)) + d_list, xlabel="run.D", ylabel="D")
+        plot_heatmap(datas, fig, map2liarpos_heat, "liar amount", flat=args.flat, grid=grid, ns=d_list, ds=list(range(0, 50, 2)) + d_list, xlabel="run.D", ylabel="D")
     elif figure == "liardepth":
-        plot_heatmap(datas, fig, map2liardepth_heat, "liar depth(average)", flat=args.flat, ns=d_list, ds=list(range(0, 50, 2)) + d_list, xlabel="run.D", ylabel="D")
+        plot_heatmap(datas, fig, map2liardepth_heat, "liar depth(average)", flat=args.flat, grid=grid, ns=d_list, ds=list(range(0, 50, 2)) + d_list, xlabel="run.D", ylabel="D")
     elif figure == "liarinfo":
-        plot_heatmap(datas, fig, map2liarinfo_heat, "liar info", flat=args.flat, ns=d_list, ds=list(range(0, 50, 2)) + d_list, xlabel="run.D", ylabel="D")
+        plot_heatmap(datas, fig, map2liarinfo_heat, "liar info", flat=args.flat, grid=grid, ns=d_list, ds=list(range(0, 50, 2)) + d_list, xlabel="run.D", ylabel="D")
     elif dim_match := re.match("liarpos\(([0-9]+)\)", figure):
         plot_dim(datas, fig, map2liarpos, int(dim_match.group(1)), "liar amount")
     elif dim_match := re.match("liardepth\(([0-9]+)\)", figure):
