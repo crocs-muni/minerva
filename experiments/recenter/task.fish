@@ -76,7 +76,7 @@ function run_atk
 end
 
 function get_fname
-    echo "$EXPERIMENT_DIR/run/$argv[1]_$argv[2]_$argv[3]_$argv[4]_$argv[5].csv"
+    echo "$EXPERIMENT_DIR/run/$argv[1]_$argv[2]_$argv[3]_$argv[4]_$argv[5]_$argv[6].csv"
 end
 
 set params (cat $EXPERIMENT_DIR/poc/attack/params.json | jq ".attack.num = $n | .dimension = $d | .attack.method = \"$method\" | .recenter = \"$recenter\"")
@@ -85,7 +85,7 @@ if string match -r "const[0-9]+" "$bounds"
     # run const with the diff ls
     set bound (string match -r "[0-9]+" "$bounds" | tail -n1)
     set params (echo $params | jq ".bounds = {\"type\": \"constant\", \"value\": $bound}")
-    set fname (get_fname $data "const$bound" $method $n $d)
+    set fname (get_fname $data "const$bound" $method $recenter $n $d)
     echo "Running const$bound $method"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
 else if string match -r "geom[0-9]+" "$bounds"
@@ -101,17 +101,17 @@ else if string match -r "geom[0-9]+" "$bounds"
     set p128 (math "$bound" + 7)
     set params (echo $params | jq ".bounds = {\"type\": \"gg\"}")
     set params (echo $params | jq ".bounds.parts = {\"128\": $p128, \64\": $p64, \"32\": $p32, \"16\": $p16, \"8\": $p8, \"4\": $p4, \"2\": $p2, \"1\": $p1}")
-    set fname (get_fname $data "geom$bound" $method $n $d)
+    set fname (get_fname $data "geom$bound" $method $recenter $n $d)
     echo "Running geom$bound" "$method"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
 else if string match -r "geomN" "$bounds"
     set params (echo $params | jq ".bounds = {\"type\": \"geomN\"}")
-    set fname (get_fname $data "geomN" $method $n $d)
+    set fname (get_fname $data "geomN" $method $recenter $n $d)
     echo "Running geomN $method"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
 else if string match -r -e "^known\$" "$bounds"
     set params (echo $params | jq ".bounds = {\"type\": \"known\"}")
-    set fname (get_fname $data "known" $method $n $d)
+    set fname (get_fname $data "known" $method $recenter $n $d)
     echo "Running known $method"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
 else if string match -r "template[0-9]+" "$bounds"
@@ -122,7 +122,7 @@ else if string match -r "template[0-9]+" "$bounds"
     set params (echo $params | jq ".bounds.type = \"template\"")
     set l (math "$alpha * 100" | cut -d"." -f 1)
     set l (printf "%02i" "$l")
-    set fname (get_fname $data "template$l" $method $n $d)
+    set fname (get_fname $data "template$l" $method $recenter $n $d)
     echo "Running template$l $method"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
 end

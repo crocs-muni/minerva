@@ -77,15 +77,18 @@ class Solver(Thread):
                 max_bound = bound
         return max_bound
 
-    def geomN_bound_func(self, index, N):
-        Npart = N
+    def geomN_bound_func(self, index, N, bounds):
+        if "index" in bounds:
+            index += bounds["index"]
+        value = bounds["value"] if "value" in bounds else 0
+        mul = bounds["multiple"] if "multiple" in bounds else 1
         i = 1
-        while Npart / (2 ** i) >= index + 1:
+        while (N * mul) / (2 ** i) >= index + 1:
             i += 1
         i -= 1
         if i <= 1:
             return 0
-        return i
+        return max(i - value, 0)
 
     def known_bound_func(self, index, dim):
         return self.curve.group.n.bit_length() - int(
@@ -245,7 +248,7 @@ class Solver(Thread):
         elif self.params["bounds"]["type"] == "geom":
             self.bounds = [self.geom_bound_func(i, dim, self.params["bounds"]) for i in range(dim)]
         elif self.params["bounds"]["type"] == "geomN":
-            self.bounds = [self.geomN_bound_func(i, len(self.signatures)) for i in range(dim)]
+            self.bounds = [self.geomN_bound_func(i, len(self.signatures), self.params["bounds"]) for i in range(dim)]
         elif self.params["bounds"]["type"] == "known" or self.params["bounds"][
             "type"] == "knownre":
             self.bounds = [self.known_bound_func(i, dim) for i in range(dim)]

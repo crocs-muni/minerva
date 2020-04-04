@@ -96,9 +96,22 @@ else if string match -r "geom[0-9]+" "$bounds"
     set fname (get_fname $data "geom$bound" $n $d)
     echo "Running geom$bound"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
-else if string match -r "geomN" "$bounds"
+else if string match -r "geomN(i[0-9]+)?(m[0-9]+)?(x[0-9]+)?" "$bounds"
     set params (echo $params | jq ".bounds = {\"type\": \"geomN\"}")
-    set fname (get_fname $data "geomN" $n $d)
+    set iparam (echo "$bounds" | grep -o "i[0-9]+" | grep -o "[0-9]+")
+    if [ -n "$iparam" ]
+        set params (echo $params | jq ".bounds.index = $iparam")
+    end
+    set mparam (echo "$bounds" | grep -o "m[0-9]+" | grep -o "[0-9]+")
+    if [ -n "$mparam" ]
+        set params (echo $params | jq ".bounds.value = $mparam")
+    end
+    set xparam (echo "$bounds" | grep -o "x[0-9]+" | grep -o "[0-9]+")
+    if [ -n "$xparam" ]
+        set xvalue (math "$xparam" / 100)
+        set params (echo $params | jq ".bounds.multiple = $xvalue")
+    end
+    set fname (get_fname $data "geomN$iparam$mparam$xparam" $n $d)
     echo "Running geomN"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
 else if string match -r -e "^known\$" "$bounds"

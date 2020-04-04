@@ -22,7 +22,7 @@ export ARTIFACT_DIR
 export EXPERIMENT_DIR
 while read todo
     set todo_parts (string split "_" "$todo")
-    if [ (count "$todo_parts") -ne 6 ]
+    if [ (count $todo_parts) -ne 6 ]
         echo "Bad input: $todo_parts" >&2
         continue
     end
@@ -49,5 +49,5 @@ while read todo
     set walltime "00:$d:00"
     echo $data $bounds $method $recenter $n $d
     set task_name minerva_""$data""_""$bounds""_""$method""_""$recenter""_""$n""_$d
-    qsub -v ARTIFACT_DIR,EXPERIMENT_DIR -W umask=002 -W group_list=crocs -q $pbs_server -N $task_name -e $EXPERIMENT_DIR/logs/$task_name.err -o $EXPERIMENT_DIR/logs/$task_name.out -l select=1:ncpus=1:mem=1gb:cl_adan=False -l walltime=$walltime -- $task $data secp256r1 $hash $ARTIFACT_DIR/data/$fname $bounds $method $recenter $n $d
+    qsub -v ARTIFACT_DIR,EXPERIMENT_DIR -W umask=002 -W group_list=crocs -q $pbs_server -N $task_name -e $EXPERIMENT_DIR/logs/$task_name.err -o $EXPERIMENT_DIR/logs/$task_name.out -l select=1:ncpus=1:mem=512mb -l walltime=$walltime -- $task $data secp256r1 $hash $ARTIFACT_DIR/data/$fname $bounds $method $recenter $n $d
 end
