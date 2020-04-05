@@ -73,14 +73,14 @@ end
 
 set params (cat $EXPERIMENT_DIR/poc/attack/params.json | jq ".attack.num = $n | .dimension = $d")
 
-if string match -r "const[0-9]+" "$bounds"
+if string match -q -r -e "^const[0-9]+\$" "$bounds"
     # run const with the diff ls
     set bound (string match -r "[0-9]+" "$bounds" | tail -n1)
     set params (echo $params | jq ".bounds = {\"type\": \"constant\", \"value\": $bound}")
     set fname (get_fname $data "const$bound" $n $d)
-    echo "Running const$bound"
+    echo "Running $bounds"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
-else if string match -r "geom[0-9]+" "$bounds"
+else if string match -q -r -e "^geom[0-9]+\$" "$bounds"
     # run geom with the diff ls
     set bound (string match -r "[0-9]+" "$bounds" | tail -n1)
     set p1 "$bound"
@@ -94,37 +94,37 @@ else if string match -r "geom[0-9]+" "$bounds"
     set params (echo $params | jq ".bounds = {\"type\": \"geom\"}")
     set params (echo $params | jq ".bounds.parts = {\"128\": $p128, \"64\": $p64, \"32\": $p32, \"16\": $p16, \"8\": $p8, \"4\": $p4, \"2\": $p2, \"1\": $p1}")
     set fname (get_fname $data "geom$bound" $n $d)
-    echo "Running geom$bound"
+    echo "Running $bounds"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
-else if string match -r "geomN(i[0-9]+)?(m[0-9]+)?(x[0-9]+)?" "$bounds"
+else if string match -q -r -e "^geomN(i[0-9]+)?(m[0-9]+)?(x[0-9]+)?\$" "$bounds"
     set params (echo $params | jq ".bounds = {\"type\": \"geomN\"}")
-    set iparam (echo "$bounds" | grep -o "i[0-9]+" | grep -o "[0-9]+")
+    set iparam (echo "$bounds" | grep -E -o "i[0-9]+" | grep -E -o "[0-9]+")
     if [ -n "$iparam" ]
         set params (echo $params | jq ".bounds.index = $iparam")
     end
-    set mparam (echo "$bounds" | grep -o "m[0-9]+" | grep -o "[0-9]+")
+    set mparam (echo "$bounds" | grep -E -o "m[0-9]+" | grep -E -o "[0-9]+")
     if [ -n "$mparam" ]
         set params (echo $params | jq ".bounds.value = $mparam")
     end
-    set xparam (echo "$bounds" | grep -o "x[0-9]+" | grep -o "[0-9]+")
+    set xparam (echo "$bounds" | grep -E -o "x[0-9]+" | grep -E -o "[0-9]+")
     if [ -n "$xparam" ]
         set xvalue (math "$xparam" / 100)
         set params (echo $params | jq ".bounds.multiple = $xvalue")
     end
-    set fname (get_fname $data "geomN$iparam$mparam$xparam" $n $d)
-    echo "Running geomN"
+    set fname (get_fname $data $bounds $n $d)
+    echo "Running $bounds"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
-else if string match -r -e "^known\$" "$bounds"
+else if string match -q -r -e "^known\$" "$bounds"
     set params (echo $params | jq ".bounds = {\"type\": \"known\"}")
     set fname (get_fname $data "known" $n $d)
-    echo "Running known"
+    echo "Running $bounds"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
-else if string match -r -e "^knownre\$" "$bounds"
+else if string match -q -r -e "^knownre\$" "$bounds"
     set params (echo $params | jq ".bounds = {\"type\": \"knownre\"}")
     set fname (get_fname $data "knownre" $n $d)
-    echo "Running knownre"
+    echo "Running $bounds"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
-else if string match -r "template[0-9]+" "$bounds"
+else if string match -q -r -e "^template[0-9]+\$" "$bounds"
     # alpha is a percent
     set alpha (string match -r "[0-9]+" "$bounds" | tail -n1)
     set temp_bounds (cat $data.json | jq ".\"$alpha\".\"$d\".\"$n\"")

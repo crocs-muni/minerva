@@ -63,9 +63,10 @@ if __name__ == "__main__":
     d_list = list(range(50, 142, 2))
     n_list = list(it.chain(range(500, 7100, 100), range(8000, 11000, 1000)))
     for data in ("sw", "card", "sim", "tpm"):
-        for bounds in ("known", "knownre", "geom", "geom1", "geom2", "geom3", "geom4", "geomN", "const1", "const2", "const3", "const4", "template01", "template10", "template30", "templatem01", "templatem10", "templatem30"):
+        for bounds in ("known", "knownre", "geom", "geom1", "geom2", "geom3", "geom4", "geomN", "geomNm1", "const1", "const2", "const3", "const4", "template01", "template10", "template30", "templatem01", "templatem10", "templatem30"):
             loaded = load_data(data, bounds, d_list, n_list)
-            print(data, bounds, len(loaded))
             all_runs.update(loaded)
-            print(len(all_runs))
+            if loaded:
+                print(data, bounds, len(loaded))
+                print(len(all_runs))
     save_transformed(all_runs, "results/runs.pickle")
