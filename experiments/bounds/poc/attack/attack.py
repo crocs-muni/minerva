@@ -248,7 +248,7 @@ class Solver(Thread):
         elif self.params["bounds"]["type"] == "geom":
             self.bounds = [self.geom_bound_func(i, dim, self.params["bounds"]) for i in range(dim)]
         elif self.params["bounds"]["type"] == "geomN":
-            self.bounds = [self.geomN_bound_func(i, len(self.signatures), self.params["bounds"]) for i in range(dim)]
+            self.bounds = [self.geomN_bound_func(i, self.params["attack"]["num"], self.params["bounds"]) for i in range(dim)]
         elif self.params["bounds"]["type"] == "known" or self.params["bounds"][
             "type"] == "knownre":
             self.bounds = [self.known_bound_func(i, dim) for i in range(dim)]

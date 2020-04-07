@@ -99,7 +99,7 @@ else if string match -q -r -e "^geom[0-9]+\$" "$bounds"
     set p64 (math "$bound" + 6)
     set p128 (math "$bound" + 7)
     set params (echo $params | jq ".bounds = {\"type\": \"geom\"}")
-    set params (echo $params | jq ".bounds.parts = {\"128\": $p128, \64\": $p64, \"32\": $p32, \"16\": $p16, \"8\": $p8, \"4\": $p4, \"2\": $p2, \"1\": $p1}")
+    set params (echo $params | jq ".bounds.parts = {\"128\": $p128, \"64\": $p64, \"32\": $p32, \"16\": $p16, \"8\": $p8, \"4\": $p4, \"2\": $p2, \"1\": $p1}")
     set fname (get_fname $data "geom$bound" $method $n $d)
     echo "Running $bounds" "$method"
     run_atk "$curve" "$hash" "$input" "$params" >$fname

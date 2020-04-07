@@ -4,7 +4,7 @@ import csv
 import hashlib
 import json
 import random
-import sys
+import secrets
 import time
 from binascii import unhexlify
 from collections import namedtuple
@@ -17,7 +17,7 @@ from bisect import bisect
 import numpy as np
 from ec import get_curve, Mod
 from fpylll import LLL, BKZ, IntegerMatrix, GSO
-from g6k.siever import Siever
+from g6k.siever import Siever, SaturationError
 from numpy.linalg import inv as matrix_inverse
 
 Signature = namedtuple("Signature", ("elapsed", "h", "t", "u", "r", "s", "sinv"))
@@ -64,8 +64,8 @@ class Solver(Thread):
         self.solution_func = solution_func
         self.privkey = privkey
 
-    def bound_func(self, index, dim, bounds):
-        return self.bounds[index]
+    def bound_func(self, index, dim, bounds, recenter):
+        return self.bounds[index] + (1 if recenter == "yes" else 0)
 
     def const_bound_func(self, bounds):
         return bounds["value"]
@@ -94,28 +94,28 @@ class Solver(Thread):
         return self.curve.group.n.bit_length() - int(
                 self.recompute_nonce(self.signatures[index])).bit_length()
 
-    def build_cvp_lattice(self, signatures, dim, bounds):
+    def build_cvp_lattice(self, signatures, dim, bounds, recenter):
         b = IntegerMatrix(dim + 1, dim + 1)
         for i in range(dim):
-            b[i, i] = (2 ** self.bound_func(i, dim, bounds)) * self.curve.group.n
-            b[dim, i] = (2 ** self.bound_func(i, dim, bounds)) * signatures[i][0]
+            b[i, i] = (2 ** self.bound_func(i, dim, bounds, recenter)) * self.curve.group.n
+            b[dim, i] = (2 ** self.bound_func(i, dim, bounds, recenter)) * signatures[i][0]
         b[dim, dim] = 1
         return b
 
-    def build_svp_lattice(self, signatures, dim, bounds):
-        re_value = self.curve.group.n if self.params["bounds"]["type"] == "knownre" else 0
+    def build_svp_lattice(self, signatures, dim, bounds, recenter):
+        re_value = self.curve.group.n if recenter == "yes" else 0
         b = IntegerMatrix(dim + 2, dim + 2)
         for i in range(dim):
-            b[i, i] = (2 ** self.bound_func(i, dim, bounds)) * self.curve.group.n
-            b[dim, i] = (2 ** self.bound_func(i, dim, bounds)) * signatures[i][0]
-            b[dim + 1, i] = (2 ** self.bound_func(i, dim, bounds)) * signatures[i][1] + re_value
+            b[i, i] = (2 ** self.bound_func(i, dim, bounds, recenter)) * self.curve.group.n
+            b[dim, i] = (2 ** self.bound_func(i, dim, bounds, recenter)) * signatures[i][0]
+            b[dim + 1, i] = (2 ** self.bound_func(i, dim, bounds, recenter)) * signatures[i][1] + re_value
         b[dim, dim] = 1
         b[dim + 1, dim + 1] = self.curve.group.n
         return b
 
-    def build_target(self, signatures, dim, bounds):
-        re_value = self.curve.group.n if self.params["bounds"]["type"] == "knownre" else 0
-        return [(2 ** self.bound_func(i, dim, bounds)) * signatures[i][1] + re_value for i in
+    def build_target(self, signatures, dim, bounds, recenter):
+        re_value = self.curve.group.n if recenter == "yes" else 0
+        return [(2 ** self.bound_func(i, dim, bounds, recenter)) * signatures[i][1] + re_value for i in
                 range(dim)] + [0]
 
     def log(self, msg):
@@ -136,12 +136,12 @@ class Solver(Thread):
                                                   map(lambda x: int(round(x)), coeffs)) * lattice)[
                          0])
 
-    def babai(self, lattice, gso, target):
+    def babai_np(self, lattice, gso, target):
         self.log("Start Babai's Nearest Plane.")
         combs = gso.babai(target)
         return self.vector_from_coeffs(combs, lattice)
 
-    def round(self, lattice, target):
+    def babai_round(self, lattice, target):
         self.log("Start Babai's Rounding.")
         b = np.empty((lattice.nrows, lattice.ncols), "f8")
         lattice.to_matrix(b)
@@ -220,7 +220,7 @@ class Solver(Thread):
 
         dim = self.params["dimension"]
 
-        if self.params["bounds"]["type"] in ("known", "knownre"):
+        if self.params["bounds"]["type"] == "known":
             sigs = self.signatures
             self.signatures = []
             blens = []
@@ -248,9 +248,8 @@ class Solver(Thread):
         elif self.params["bounds"]["type"] == "geom":
             self.bounds = [self.geom_bound_func(i, dim, self.params["bounds"]) for i in range(dim)]
         elif self.params["bounds"]["type"] == "geomN":
-            self.bounds = [self.geomN_bound_func(i, len(self.signatures), self.params["bounds"]) for i in range(dim)]
-        elif self.params["bounds"]["type"] == "known" or self.params["bounds"][
-            "type"] == "knownre":
+            self.bounds = [self.geomN_bound_func(i, self.params["attack"]["num"], self.params["bounds"]) for i in range(dim)]
+        elif self.params["bounds"]["type"] == "known":
             self.bounds = [self.known_bound_func(i, dim) for i in range(dim)]
         elif self.params["bounds"]["type"] == "template":
             self.bounds = [0 for _ in range(dim)]
@@ -284,21 +283,27 @@ class Solver(Thread):
 
         self.svp = self.params["attack"]["method"] == "svp"
         self.sieve = self.params["attack"]["method"] == "sieve"
-        self.cvp = self.params["attack"]["method"] == "cvp"
+        self.np = self.params["attack"]["method"] == "np"
+        self.round = self.params["attack"]["method"] == "round"
 
         if self.svp or self.sieve:
-            lattice = self.build_svp_lattice(pairs, dim, self.params["bounds"])
-        elif self.cvp:
-            lattice = self.build_cvp_lattice(pairs, dim, self.params["bounds"])
-            target = self.build_target(pairs, dim, self.params["bounds"])
+            lattice = self.build_svp_lattice(pairs, dim, self.params["bounds"], self.params["recenter"])
+        elif self.np or self.round:
+            lattice = self.build_cvp_lattice(pairs, dim, self.params["bounds"], self.params["recenter"])
+            target = self.build_target(pairs, dim, self.params["bounds"], self.params["recenter"])
         else:
             self.log("Bad method: {}".format(self.params["attack"]["method"]))
             return
 
         if self.sieve:
+            self.reduce_lattice(lattice, None)
             g6k = Siever(lattice)
+            self.log("Start SIEVE.")
             g6k.initialize_local(0, 0, dim)
-            g6k()
+            try:
+                g6k()
+            except SaturationError as e:
+                pass
             short = self.verify_sieve(lattice, g6k.best_lifts())
             if short is not None:
                 i, res = short
@@ -321,14 +326,16 @@ class Solver(Thread):
                     self.log("Result normdist: {}".format(norm))
                     break
 
-            if self.cvp:
-                # closest = self.round(lattice, target)
-                # if self.verify_closest(closest, self.pubkey):
-                #   break
+            if self.round:
+                closest = self.babai_round(lattice, target)
+                if self.verify_closest(closest, self.pubkey):
+                    dist = self.dist(closest, target)
+                    self.log("Result normdist: {}".format(dist))
+                    break
 
-                closest = self.babai(lattice, gso, target)
-                close = self.verify_closest(closest, self.pubkey)
-                if close is not None:
+            if self.np:
+                closest = self.babai_np(lattice, gso, target)
+                if self.verify_closest(closest, self.pubkey) is not None:
                     dist = self.dist(closest, target)
                     self.log("Result normdist: {}".format(dist))
                     break
@@ -364,7 +371,7 @@ if __name__ == "__main__":
         print("[x] No curve found:", args.curve)
         exit(1)
     try:
-        hash = hashlib.new(args.hash)
+        hash_func = hashlib.new(args.hash)
     except ValueError:
         print("[x] No hash algorithm found:", args.hash)
         exit(1)
@@ -382,7 +389,7 @@ if __name__ == "__main__":
 
         reader = csv.reader(sigfile)
         signatures = [
-            construct_signature(curve, hash, data, int(row[0], 16), int(row[1], 16), int(row[2]))
+            construct_signature(curve, hash_func, data, int(row[0], 16), int(row[1], 16), int(row[2]))
             for row in reader]
     print("[*] Loaded {} signatures.".format(len(signatures)))
 
@@ -393,11 +400,7 @@ if __name__ == "__main__":
     full_signatures = copy(signatures)
 
     if args.params["attack"]["type"] == "random" and args.params["attack"]["num"] < len(signatures):
-        if args.params["attack"]["seed"] is None:
-            seed = random.randint(0, 2 ** 40)
-        else:
-            seed = args.params["attack"]["seed"]
-        print("[*] Random seed:", seed)
+        seed = hash((args.params["attack"]["num"], args.params["dimension"]))
         random.seed(seed)
         signatures = random.sample(signatures, args.params["attack"]["num"])
     print("[*] Using {} signatures.".format(len(signatures)))
@@ -409,6 +412,15 @@ if __name__ == "__main__":
         found = True
 
     print("[ ] Starting attack.")
+    if args.params["attack"]["seed"] is None:
+        seed = secrets.randbelow(2 ** 40)
+    else:
+        seed = args.params["attack"]["seed"]
+    print("[*] Random seed:", seed)
+    random.seed(seed)
+    signatures.sort()
+    upper = min((int(args.params["c"] * args.params["dimension"]), args.params["attack"]["num"]))
+    signatures = random.sample(signatures[:upper], args.params["dimension"])
     signatures.sort()
     solver = Solver(curve, signatures, full_signatures, pubkey, args.params,
                     solution, privkey)

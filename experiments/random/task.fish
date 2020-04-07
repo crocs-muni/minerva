@@ -1,10 +1,9 @@
-
 #!/usr/bin/env fish
 
-# args: datatype curve hash input_file bounds method recenter n d
+# args: datatype curve hash input_file bounds method recenter c n d
 
-if [ (count $argv) -ne 9 ]
-    echo "Usage: datatype curve hash input bounds method recenter n d" >&2
+if [ (count $argv) -ne 10 ]
+    echo "Usage: datatype curve hash input bounds method recenter c n d" >&2
     echo "Error!" >&2
     exit 1
 end
@@ -16,8 +15,9 @@ set input "$argv[4]"
 set bounds "$argv[5]"
 set method "$argv[6]"
 set recenter "$argv[7]"
-set n "$argv[8]"
-set d "$argv[9]"
+set c "$argv[8]"
+set n "$argv[9]"
+set d "$argv[10]"
 
 echo $PBS_JOBID
 cat $PBS_NODEFILE
@@ -37,7 +37,8 @@ function run_atk
         rm -f $input_temp
         exit 1
     end
-    for i in (seq 5)
+    set successful 0
+    for i in (seq 200)
         set start (date +%s)
         set out ($EXPERIMENT_DIR/poc/attack/attack.py $argv[1] $argv[2] $input_temp -p $params_temp)
         set stop (date +%s)
@@ -54,6 +55,7 @@ function run_atk
             set result_row 0
             set result_normdist 0
         end
+        set successful (math $successful + $found)
         set overhead (echo $out | grep -o "overhead [0-9]\\.[0-9]*" | grep -o "[0-9]\\.[0-9]*")
         set info (echo $out | grep -o "[0-9]* bits of information" | grep -o "[0-9]*")
         set random_seed (echo $out | grep -o "Random seed: [0-9]*" | grep -o "[0-9]*")
@@ -71,22 +73,25 @@ function run_atk
         end
         set num_guesses (echo $out | grep -c "Guess")
         echo "$random_seed,$found,$duration,$block_size,$info,$liars,$real_info,$bad_info,$good_info,$liar_positions,$result_normdist,$result_row"
+        if [ $successful -eq 100 ]
+            break
+        end
     end
     rm -f $params_temp
     rm -f $input_temp
 end
 
 function get_fname
-    echo "$EXPERIMENT_DIR/run/$argv[1]_$argv[2]_$argv[3]_$argv[4]_$argv[5]_$argv[6].csv"
+    echo "$EXPERIMENT_DIR/run/$argv[1]_$argv[2]_$argv[3]_$argv[4]_$argv[5]_$argv[6]_$argv[7].csv"
 end
 
-set params (cat $EXPERIMENT_DIR/poc/attack/params.json | jq ".attack.num = $n | .dimension = $d | .attack.method = \"$method\" | .recenter = \"$recenter\"")
+set params (cat $EXPERIMENT_DIR/poc/attack/params.json | jq ".attack.num = $n | .dimension = $d | .attack.method = \"$method\" | .recenter = \"$recenter\" | .c = $c")
 
 if string match -q -r -e "^const[0-9]+\$" "$bounds"
     # run const with the diff ls
     set bound (string match -r "[0-9]+" "$bounds" | tail -n1)
     set params (echo $params | jq ".bounds = {\"type\": \"constant\", \"value\": $bound}")
-    set fname (get_fname $data "const$bound" $method $recenter $n $d)
+    set fname (get_fname $data "const$bound" $method $recenter $c $n $d)
     echo "Running $bounds $method $recenter"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
 else if string match -q -r -e "^geom[0-9]+\$" "$bounds"
@@ -102,7 +107,7 @@ else if string match -q -r -e "^geom[0-9]+\$" "$bounds"
     set p128 (math "$bound" + 7)
     set params (echo $params | jq ".bounds = {\"type\": \"geom\"}")
     set params (echo $params | jq ".bounds.parts = {\"128\": $p128, \"64\": $p64, \"32\": $p32, \"16\": $p16, \"8\": $p8, \"4\": $p4, \"2\": $p2, \"1\": $p1}")
-    set fname (get_fname $data "geom$bound" $method $recenter $n $d)
+    set fname (get_fname $data "geom$bound" $method $recenter $c $n $d)
     echo "Running $bounds" "$method $recenter"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
 else if string match -q -r -e "^geomN(i[0-9]+)?(m[0-9]+)?(x[0-9]+)?\$" "$bounds"
@@ -120,12 +125,12 @@ else if string match -q -r -e "^geomN(i[0-9]+)?(m[0-9]+)?(x[0-9]+)?\$" "$bounds"
         set xvalue (math "$xparam" / 100)
         set params (echo $params | jq ".bounds.multiple = $xvalue")
     end
-    set fname (get_fname $data "geomN" $method $recenter $n $d)
+    set fname (get_fname $data "geomN" $method $recenter $c $n $d)
     echo "Running $bounds $method $recenter"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
 else if string match -q -r -e "^known\$" "$bounds"
     set params (echo $params | jq ".bounds = {\"type\": \"known\"}")
-    set fname (get_fname $data "known" $method $recenter $n $d)
+    set fname (get_fname $data "known" $method $recenter $c $n $d)
     echo "Running known $method $recenter"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
 else if string match -q -r -e "^template[0-9]+\$" "$bounds"
@@ -136,7 +141,7 @@ else if string match -q -r -e "^template[0-9]+\$" "$bounds"
     set params (echo $params | jq ".bounds.type = \"template\"")
     set l (math "$alpha * 100" | cut -d"." -f 1)
     set l (printf "%02i" "$l")
-    set fname (get_fname $data "template$l" $method $recenter $n $d)
+    set fname (get_fname $data "template$l" $method $recenter $c $n $d)
     echo "Running template$l $method $recenter"
     run_atk "$curve" "$hash" "$input" "$params" >$fname
 end
