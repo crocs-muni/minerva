@@ -4,7 +4,7 @@ import csv
 import hashlib
 import json
 import random
-import sys
+import secrets
 import time
 from binascii import unhexlify
 from collections import namedtuple
@@ -371,7 +371,7 @@ if __name__ == "__main__":
         print("[x] No curve found:", args.curve)
         exit(1)
     try:
-        hash = hashlib.new(args.hash)
+        hash_func = hashlib.new(args.hash)
     except ValueError:
         print("[x] No hash algorithm found:", args.hash)
         exit(1)
@@ -389,7 +389,7 @@ if __name__ == "__main__":
 
         reader = csv.reader(sigfile)
         signatures = [
-            construct_signature(curve, hash, data, int(row[0], 16), int(row[1], 16), int(row[2]))
+            construct_signature(curve, hash_func, data, int(row[0], 16), int(row[1], 16), int(row[2]))
             for row in reader]
     print("[*] Loaded {} signatures.".format(len(signatures)))
 
@@ -400,12 +400,7 @@ if __name__ == "__main__":
     full_signatures = copy(signatures)
 
     if args.params["attack"]["type"] == "random" and args.params["attack"]["num"] < len(signatures):
-        if args.params["attack"]["seed"] is None:
-            seed = random.randint(0, 2 ** 40)
-        else:
-            seed = args.params["attack"]["seed"]
-        print("[*] Random seed:", seed)
-        random.seed(seed)
+        random.seed(args.params["attack"]["seed_n"])
         signatures = random.sample(signatures, args.params["attack"]["num"])
     print("[*] Using {} signatures.".format(len(signatures)))
 
@@ -416,6 +411,15 @@ if __name__ == "__main__":
         found = True
 
     print("[ ] Starting attack.")
+    if args.params["attack"]["seed"] is None:
+        seed = secrets.randbelow(2 ** 40)
+    else:
+        seed = args.params["attack"]["seed_d"]
+    print("[*] Random seed:", seed)
+    random.seed(seed)
+    signatures.sort()
+    upper = min((int(args.params["c"] * args.params["dimension"]), args.params["attack"]["num"]))
+    signatures = random.sample(signatures[:upper], args.params["dimension"])
     signatures.sort()
     solver = Solver(curve, signatures, full_signatures, pubkey, args.params,
                     solution, privkey)

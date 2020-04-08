@@ -4,7 +4,7 @@ import csv
 import hashlib
 import json
 import random
-import sys
+import itertools
 import time
 from binascii import unhexlify
 from collections import namedtuple
@@ -17,7 +17,7 @@ from bisect import bisect
 import numpy as np
 from ec import get_curve, Mod
 from fpylll import LLL, BKZ, IntegerMatrix, GSO
-from g6k.siever import Siever, SaturationError
+from g6k.siever import Siever
 from numpy.linalg import inv as matrix_inverse
 
 Signature = namedtuple("Signature", ("elapsed", "h", "t", "u", "r", "s", "sinv"))
@@ -32,7 +32,7 @@ DEFAULT_PARAMS = {
     },
     "dimension": 90,
     "bounds": {},
-    "betas": [15, 20, 30, 40, 45, 48, 51, 53, 55],
+    "betas": [15, 20, 30, 40, 45, 48, 51, 53, 55, 57, 60],
 }
 
 
@@ -102,17 +102,6 @@ class Solver(Thread):
         b[dim, dim] = 1
         return b
 
-    def build_svp_lattice(self, signatures, dim, bounds, recenter):
-        re_value = self.curve.group.n if recenter == "yes" else 0
-        b = IntegerMatrix(dim + 2, dim + 2)
-        for i in range(dim):
-            b[i, i] = (2 ** self.bound_func(i, dim, bounds, recenter)) * self.curve.group.n
-            b[dim, i] = (2 ** self.bound_func(i, dim, bounds, recenter)) * signatures[i][0]
-            b[dim + 1, i] = (2 ** self.bound_func(i, dim, bounds, recenter)) * signatures[i][1] + re_value
-        b[dim, dim] = 1
-        b[dim + 1, dim + 1] = self.curve.group.n
-        return b
-
     def build_target(self, signatures, dim, bounds, recenter):
         re_value = self.curve.group.n if recenter == "yes" else 0
         return [(2 ** self.bound_func(i, dim, bounds, recenter)) * signatures[i][1] + re_value for i in
@@ -141,7 +130,7 @@ class Solver(Thread):
         combs = gso.babai(target)
         return self.vector_from_coeffs(combs, lattice)
 
-    def babai_round(self, lattice, target):
+    def babai_round(self, lattice, gso, target):
         self.log("Start Babai's Rounding.")
         b = np.empty((lattice.nrows, lattice.ncols), "f8")
         lattice.to_matrix(b)
@@ -281,64 +270,43 @@ class Solver(Thread):
         self.log("Bad info: {}".format(bad_info))
         self.log("Liar positions: {}".format(";".join(liarpos)))
 
-        self.svp = self.params["attack"]["method"] == "svp"
-        self.sieve = self.params["attack"]["method"] == "sieve"
         self.np = self.params["attack"]["method"] == "np"
         self.round = self.params["attack"]["method"] == "round"
 
-        if self.svp or self.sieve:
-            lattice = self.build_svp_lattice(pairs, dim, self.params["bounds"], self.params["recenter"])
-        elif self.np or self.round:
+        if self.np or self.round:
             lattice = self.build_cvp_lattice(pairs, dim, self.params["bounds"], self.params["recenter"])
             target = self.build_target(pairs, dim, self.params["bounds"], self.params["recenter"])
         else:
             self.log("Bad method: {}".format(self.params["attack"]["method"]))
             return
 
-        if self.sieve:
-            self.reduce_lattice(lattice, None)
-            g6k = Siever(lattice)
-            self.log("Start SIEVE.")
-            g6k.initialize_local(0, 0, dim)
-            try:
-                g6k()
-            except SaturationError as e:
-                pass
-            short = self.verify_sieve(lattice, g6k.best_lifts())
-            if short is not None:
-                i, res = short
-                self.log("Result row: {}".format(i))
-                norm = self.norm(res)
-                self.log("Result normdist: {}".format(norm))
-            return
+        if self.np:
+            babai_func = self.babai_np
+        elif self.round:
+            babai_func = self.babai_round
 
         reds = [None] + self.params["betas"]
         for beta in reds:
             lattice = self.reduce_lattice(lattice, beta)
             gso = GSO.Mat(lattice)
             gso.update_gso()
-            if self.svp:
-                short = self.verify_shortest(lattice, self.pubkey)
-                if short is not None:
-                    i, res = short
-                    self.log("Result row: {}".format(i))
-                    norm = self.norm(res)
-                    self.log("Result normdist: {}".format(norm))
-                    break
 
-            if self.round:
-                closest = self.babai_round(lattice, target)
+        flip_num = 0
+        for i in range(self.params["bitflips"] + 1):
+            combinations = list(itertools.combinations(range(dim), i))
+            random.shuffle(combinations)
+            for flips in combinations:
+                flipped_target = copy(target)
+                for flip in flips:
+                    flipped_target[flip] += 2 * self.curve.group.n
+                closest = babai_func(lattice, flipped_target)
                 if self.verify_closest(closest, self.pubkey):
                     dist = self.dist(closest, target)
                     self.log("Result normdist: {}".format(dist))
-                    break
-
-            if self.np:
-                closest = self.babai_np(lattice, gso, target)
-                if self.verify_closest(closest, self.pubkey) is not None:
-                    dist = self.dist(closest, target)
-                    self.log("Result normdist: {}".format(dist))
-                    break
+                    self.log("Required flips: {}".format(";".join(map(str, flips))))
+                    self.log("Flip index: {}".format(flip_num))
+                    return
+                flip_num += 1
 
 
 def parse_params(fname):

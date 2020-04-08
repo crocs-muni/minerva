@@ -64,8 +64,8 @@ class Solver(Thread):
         self.solution_func = solution_func
         self.privkey = privkey
 
-    def bound_func(self, index, dim, bounds, recenter):
-        return self.bounds[index] + (1 if recenter == "yes" else 0)
+    def bound_func(self, index, dim, bounds):
+        return self.bounds[index]
 
     def const_bound_func(self, bounds):
         return bounds["value"]
@@ -94,29 +94,45 @@ class Solver(Thread):
         return self.curve.group.n.bit_length() - int(
                 self.recompute_nonce(self.signatures[index])).bit_length()
 
-    def build_cvp_lattice(self, signatures, dim, bounds, recenter):
+    def build_cvp_lattice(self, signatures, dim, bounds):
+        # we have dim signatures, so we will construct dim - 1 pairs and
+        # have a lattice of (dim, dim)
+        b = IntegerMatrix(dim, dim)
+        for i in range(dim - 1):
+            l1 = self.bound_func(i, dim, bounds)
+            l2 = self.bound_func(i + 1, dim, bounds)
+            l = 2 ** min((l1, l2))
+            b[i, i] = l * self.curve.group.n
+            b[dim, i] = l * (signatures[i][0] - signatures[i+1][0])
+        b[dim, dim] = 1
+        return b
+
+    def build_svp_lattice(self, signatures, dim, bounds):
+        # we have dim signatures, so we will construct dim - 1 pairs and
+        # have a latice of (dim + 1, dim + 1)
         b = IntegerMatrix(dim + 1, dim + 1)
-        for i in range(dim):
-            b[i, i] = (2 ** self.bound_func(i, dim, bounds, recenter)) * self.curve.group.n
-            b[dim, i] = (2 ** self.bound_func(i, dim, bounds, recenter)) * signatures[i][0]
-        b[dim, dim] = 1
+        for i in range(dim - 1):
+            l1 = self.bound_func(i, dim, bounds)
+            l2 = self.bound_func(i + 1, dim, bounds)
+            l = 2 ** min((l1, l2))
+            b[i, i] = l * self.curve.group.n
+            b[dim - 1, i] = l * (signatures[i][0] - signatures[i+1][0])
+            b[dim, i] = l * (signatures[i][1] - signatures[i + 1][1])
+        b[dim - 1, dim - 1] = 1
+        b[dim, dim] = self.curve.group.n
         return b
 
-    def build_svp_lattice(self, signatures, dim, bounds, recenter):
-        re_value = self.curve.group.n if recenter == "yes" else 0
-        b = IntegerMatrix(dim + 2, dim + 2)
-        for i in range(dim):
-            b[i, i] = (2 ** self.bound_func(i, dim, bounds, recenter)) * self.curve.group.n
-            b[dim, i] = (2 ** self.bound_func(i, dim, bounds, recenter)) * signatures[i][0]
-            b[dim + 1, i] = (2 ** self.bound_func(i, dim, bounds, recenter)) * signatures[i][1] + re_value
-        b[dim, dim] = 1
-        b[dim + 1, dim + 1] = self.curve.group.n
-        return b
-
-    def build_target(self, signatures, dim, bounds, recenter):
-        re_value = self.curve.group.n if recenter == "yes" else 0
-        return [(2 ** self.bound_func(i, dim, bounds, recenter)) * signatures[i][1] + re_value for i in
-                range(dim)] + [0]
+    def build_target(self, signatures, dim, bounds):
+        # we have dim signatures, so we will construct dim - 1 pairs and
+        # have a lattice of (dim, dim)
+        target = []
+        for i in range(dim - 1):
+            l1 = self.bound_func(i, dim, bounds)
+            l2 = self.bound_func(i + 1, dim, bounds)
+            l = 2 ** min((l1, l2))
+            target.append(l * (signatures[i][1] - signatures[i + 1][1]))
+        target.append(0)
+        return target
 
     def log(self, msg):
         print("[{}] {} [{}s]".format(self.thread_name, msg, int(time.time() - self.thread_start)))
@@ -218,7 +234,7 @@ class Solver(Thread):
         self.thread_start = time.time()
         self.tried = set()
 
-        dim = self.params["dimension"]
+        dim = self.params["dimension"] + 1
 
         if self.params["bounds"]["type"] == "known":
             sigs = self.signatures
@@ -233,14 +249,6 @@ class Solver(Thread):
                 if len(blens) > dim:
                     blens.pop()
                     self.signatures.pop()
-
-        pairs = [(sig.t, sig.u) for sig in self.signatures[:dim]]
-        nonces = []
-        for sig in self.signatures[:dim]:
-            nonces.append(int(self.recompute_nonce(sig)))
-        real_bitlens = [nonce.bit_length() for nonce in nonces]
-        real_infos = [self.curve.group.n.bit_length() - bitlen for bitlen in real_bitlens]
-        real_info = sum(real_infos)
 
         if self.params["bounds"]["type"] == "constant":
             value = self.const_bound_func(self.params["bounds"])
@@ -258,23 +266,38 @@ class Solver(Thread):
             for k, v in templates.items():
                 for i in range(*v):
                     self.bounds[i] = self.curve.group.n.bit_length() - int(k)
+        else:
+            self.log("Bad bounds: {}".format(self.params["bounds"]["type"]))
+            return
 
+        pairs = [(sig.t, sig.u) for sig in self.signatures[:dim]]
+        nonces = []
+        for sig in self.signatures[:dim]:
+            nonces.append(int(self.recompute_nonce(sig)))
+        real_bitlens = [nonce.bit_length() for nonce in nonces]
+        real_infos = [self.curve.group.n.bit_length() - bitlen for bitlen in real_bitlens]
         bnds = [self.bounds[i] for i in range(dim)]
-        info = sum(bnds)
-        overhead = info / self.curve.bit_size()
-        self.log("Building lattice with {} bits of information (overhead {:.2f}).".format(info,
-                                                                                          overhead))
+        info = 0
+        real_info = 0
         liars = 0
         bad_info = 0
         good_info = 0
         liarpos = []
-        for i, real, our in zip(range(dim), real_infos, bnds):
+        for i in range(dim - 1):
+            our = min((bnds[i], bnds[i+1]))
+            info += our
+            real = min((real_infos[i], real_infos[i+1]))
+            real_info += real
             if real < our:
                 liars += 1
                 bad_info += real
                 liarpos.append(str(i) + "@" + str(our - real))
             else:
                 good_info += real
+
+        overhead = info / self.curve.bit_size()
+        self.log("Building lattice with {} bits of information (overhead {:.2f}).".format(info,
+                                                                                          overhead))
         self.log("Real info: {}".format(real_info))
         self.log("Liars: {}".format(liars))
         self.log("Good info: {}".format(good_info))
@@ -287,10 +310,10 @@ class Solver(Thread):
         self.round = self.params["attack"]["method"] == "round"
 
         if self.svp or self.sieve:
-            lattice = self.build_svp_lattice(pairs, dim, self.params["bounds"], self.params["recenter"])
+            lattice = self.build_svp_lattice(pairs, dim, self.params["bounds"])
         elif self.np or self.round:
-            lattice = self.build_cvp_lattice(pairs, dim, self.params["bounds"], self.params["recenter"])
-            target = self.build_target(pairs, dim, self.params["bounds"], self.params["recenter"])
+            lattice = self.build_cvp_lattice(pairs, dim, self.params["bounds"])
+            target = self.build_target(pairs, dim, self.params["bounds"])
         else:
             self.log("Bad method: {}".format(self.params["attack"]["method"]))
             return
@@ -302,7 +325,7 @@ class Solver(Thread):
             g6k.initialize_local(0, 0, dim)
             try:
                 g6k()
-            except SaturationError as e:
+            except SaturationError:
                 pass
             short = self.verify_sieve(lattice, g6k.best_lifts())
             if short is not None:
