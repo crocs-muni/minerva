@@ -19,10 +19,12 @@ set d "$argv[7]"
 echo $PBS_JOBID
 cat $PBS_NODEFILE
 
+trap "clean_scratch 2>&1 >/dev/null" TERM
+
 function run_atk
     #args: curve1  hash2  input3  params4 
-    set params_temp (mktemp)
-    set input_temp (mktemp)
+    set params_temp $SCRATCHDIR/params.json
+    set input_temp $SCRATCHDIR/input.csv
     echo "$argv[4]" >$params_temp
     cat "$argv[3]" >$input_temp
     set input_hash (sha256sum $input_temp | cut -d" " -f1)
@@ -30,8 +32,7 @@ function run_atk
     if [ "$input_hash" != "$expected_hash" ]
         echo "Hash mismatch! $input_hash $expected_hash" >&2
         echo "Error!" >&2
-        rm -f $params_temp
-        rm -f $input_temp
+        clean_scratch 2>&1 >/dev/null
         exit 1
     end
     for i in (seq 5)
@@ -63,8 +64,7 @@ function run_atk
         set num_guesses (echo $out | grep -c "Guess")
         echo "$random_seed,$found,$duration,$block_size,$info,$liars,$real_info,$bad_info,$good_info,$liar_positions,$result_normdist,$result_row"
     end
-    rm -f $params_temp
-    rm -f $input_temp
+    clean_scratch 2>&1 >/dev/null
 end
 
 function get_fname

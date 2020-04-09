@@ -1,18 +1,19 @@
-# Experiment 2
+# Experiment 2 - Methods for HNP solving
 
-## Methods for HNP solving
+---
 
 ### Hypothesis
-Some of those are better than others.
+SVP is better than the others.
 
 ### Setup
 
- - Compare CVP(Babai, BKZ), CVP(Rounding, BKZ), SVP(BKZ), SVP(Sieving BKZ) on
+ - Compare CVP(Babai, BKZ), CVP(Rounding, BKZ), SVP(BKZ), SVP(Sieving) on
  some interesting part of the parameter space, where the methods start to work.
 
 ### Outputs
 
- - Similar to the first experiment, or even exact.
+ - As in the first experiment, the CVP options do not output `result_row` as that
+ does not make sense.
 
 ### Visualizations
 
@@ -21,3 +22,11 @@ Some of those are better than others.
 ### Why?
 
  - To know which method to use further.
+
+### Conclusions
+
+ - SVP is the best.
+ - Babai NP works.
+ - Babai rounding does not work.
+ - g6k for sieving is hard to get to work(Python and code-wise, not result wise).
+ So it remains untested.

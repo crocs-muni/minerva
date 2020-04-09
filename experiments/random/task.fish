@@ -22,10 +22,12 @@ set d "$argv[10]"
 echo $PBS_JOBID
 cat $PBS_NODEFILE
 
+trap "clean_scratch 2>&1 >/dev/null" TERM
+
 function run_atk
     #args: curve1  hash2  input3  params4 
-    set params_temp (mktemp)
-    set input_temp (mktemp)
+    set params_temp $SCRATCHDIR/params.json
+    set input_temp $SCRATCHDIR/input.csv
     echo "$argv[4]" >$params_temp
     cat "$argv[3]" >$input_temp
     set input_hash (sha256sum $input_temp | cut -d" " -f1)
@@ -33,8 +35,7 @@ function run_atk
     if [ "$input_hash" != "$expected_hash" ]
         echo "Hash mismatch! $input_hash $expected_hash" >&2
         echo "Error!" >&2
-        rm -f $params_temp
-        rm -f $input_temp
+        clean_scratch 2>&1 >/dev/null
         exit 1
     end
     set successful 0
@@ -77,8 +78,7 @@ function run_atk
             break
         end
     end
-    rm -f $params_temp
-    rm -f $input_temp
+    clean_scratch 2>&1 >/dev/null
 end
 
 function get_fname

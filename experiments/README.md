@@ -1,11 +1,14 @@
 # Experiments
 
 **[METACENTRUM ONLY]**
+This directory is only usable to run the experiments on [Metacentrum](https://metacentrum.cz/en/),
+the Czech National Grid Infrastructure. It uses the PBS Professional job submission/management system 
+so it could be adapted easily to other deployments of it. The experiments could also be adapted 
+to run locally, although the are computationaly heavy.
 
 ## Experiment workflow
 
-Before running any experiments, make sure you sourced the `activate.sh` script at the
-root of the artifact.
+Before running any experiments, make sure you sourced the `activate.sh` script at the root of the artifact.
 
 Use fish scripts in `submit` directory to submit jobs. This script sets up `EXPERIMENT_DIR` and passes it to jobs.
 It actually submits the `task.sh` script as the job. This script is just a simple BASH wrapper
@@ -28,6 +31,41 @@ Use `plot_new.py` for plotting.
 
 ## Bounds
 
+Experiment to study what bounds to use in the attack.
+
+See [info](bounds/info.md).
+
 ## Methods
 
+Experiment to study what lattice techniques to use in the attack (SVP/CVP/...).
+
+See [info](methods/info.md).
+
 ## Recenter
+
+Experiment to study the effects of recentering.
+
+See [info](recenter/info.md).
+
+## Differences
+
+Experiment to study the effects of taking the differences of nonces, instead of
+the nonces themselves, into the lattice.
+
+See [info](differences/info.md).
+
+## Random subsets
+
+Experiment to study the effect of taking random subsets of signatures (in order
+to eliminate errors).
+
+This experiment was run twice, because the first try
+was misconfigured. See `random_subsets` directory for the proper one.
+
+See [info](random/info.md) and [info](random_subsets/info.md)
+
+## Bitflips
+
+Experiment to study the approach of error correction using CVP + bitflips.
+
+See [info](bitflips/info.md).

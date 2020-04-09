@@ -37,6 +37,6 @@ for d in (seq 50 2 140)
     for n in (seq 500 100 7000) (seq 8000 1000 10000)
         echo $data $bounds $method $recenter $c $n $d
         set task_name minerva_""$data""_""$bounds""_""$method""_""$recenter""_""$c""_""$n""_$d
-        qsub -v ARTIFACT_DIR,EXPERIMENT_DIR -W umask=002 -W group_list=crocs -P minerva_random_exp -N $task_name -q @meta-pbs.metacentrum.cz -e $EXPERIMENT_DIR/logs/$task_name.err -o $EXPERIMENT_DIR/logs/$task_name.out -l select=1:ncpus=1:mem=512mb -l walltime=$walltime -- $task $data secp256r1 $hash $ARTIFACT_DIR/data/$fname $bounds $method $recenter $c $n $d
+        qsub -v ARTIFACT_DIR,EXPERIMENT_DIR -W umask=002 -W group_list=crocs -P minerva_random_exp -N $task_name -q @meta-pbs.metacentrum.cz -e $EXPERIMENT_DIR/logs/$task_name.err -o $EXPERIMENT_DIR/logs/$task_name.out -l select=1:ncpus=1:mem=512mb:scratch_local=512mb -l walltime=$walltime -- $task $data secp256r1 $hash $ARTIFACT_DIR/data/$fname $bounds $method $recenter $c $n $d
     end
 end

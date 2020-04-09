@@ -23,10 +23,12 @@ set d "$argv[10]"
 echo $PBS_JOBID
 cat $PBS_NODEFILE
 
+trap "clean_scratch 2>&1 >/dev/null" TERM
+
 function run_atk
     #args: curve1  hash2  input3  params4 
-    set params_temp (mktemp)
-    set input_temp (mktemp)
+    set params_temp $SCRATCHDIR/params.json
+    set input_temp $SCRATCHDIR/input.csv
     echo "$argv[4]" >$params_temp
     cat "$argv[3]" >$input_temp
     set input_hash (sha256sum $input_temp | cut -d" " -f1)
@@ -34,8 +36,7 @@ function run_atk
     if [ "$input_hash" != "$expected_hash" ]
         echo "Hash mismatch! $input_hash $expected_hash" >&2
         echo "Error!" >&2
-        rm -f $params_temp
-        rm -f $input_temp
+        clean_scratch 2>&1 >/dev/null
         exit 1
     end
     for i in (seq 5)
@@ -46,14 +47,15 @@ function run_atk
         if echo $out | grep -q "PRIVATE"
             set found 1
             set result_row (echo $out | grep -o "Result row: [0-9]*" | grep -o "[0-9]*")
-            if [ "$result_row" = "" ]
-              set result_row 0
-            end
             set result_normdist (echo $out | grep -o "Result normdist: [0-9\\.e+]*" | cut -d" " -f 3)
+            set required_flips (echo $out | grep -o "Required flips: [0-9;]*" | cut -d":" -f 2 | grep -o "[0-9;]*")
+            set flip_index (echo $out | grep -o "Flip index: [0-9]*" | grep -o "[0-9]*")        
         else
             set found 0
             set result_row 0
             set result_normdist 0
+            set required_flips ""
+            set flip_index ""
         end
         set overhead (echo $out | grep -o "overhead [0-9]\\.[0-9]*" | grep -o "[0-9]\\.[0-9]*")
         set info (echo $out | grep -o "[0-9]* bits of information" | grep -o "[0-9]*")
@@ -71,10 +73,9 @@ function run_atk
             set block_size (echo $out | grep -o "LLL")
         end
         set num_guesses (echo $out | grep -c "Guess")
-        echo "$random_seed,$found,$duration,$block_size,$info,$liars,$real_info,$bad_info,$good_info,$liar_positions,$result_normdist,$result_row"
+        echo "$random_seed,$found,$duration,$block_size,$info,$liars,$real_info,$bad_info,$good_info,$liar_positions,$result_normdist,$result_row,$required_flips,$flip_index"
     end
-    rm -f $params_temp
-    rm -f $input_temp
+    clean_scratch 2>&1 >/dev/null
 end
 
 function get_fname

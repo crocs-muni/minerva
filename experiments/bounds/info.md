@@ -2,10 +2,8 @@
 
 ---
 
-## Before
-
 ### Hypothesis
-Geometric bounds are better. If the Brumley&Tuveri method is used, even in the presence of noise.
+Geometric bounds are better. Geometric N bounds are the best. If the basic method is used, even in the presence of noise.
 
 ### Setup
 
@@ -29,7 +27,7 @@ Geometric bounds are better. If the Brumley&Tuveri method is used, even in the p
    * The templated bounds (with \(\alpha \in \{0.01, 0.1, 0.3\} = A\))
 
  - The data source:
- data = {sw, card, sim, tpm}
+ data = {sim, sw, card, tpm}
 
  - For each \( (n,d) \) run 5 times, random sampling \( n \in N \) signatures,
  constructing lattice from \(d \in D\) shortest, then either doing constant
@@ -39,15 +37,15 @@ Geometric bounds are better. If the Brumley&Tuveri method is used, even in the p
 ### Outputs
 Each task outputs {sw,card,sim,tpm}\_{geom[1-4],const[1-4],geomN,known,knownre,template[01,10,30]}\_{n}\_{d}.csv with 5 lines for the 5 runs:
 
-`seed, success, duration, last_reduction_step, info, #liars, real_info, bad_info, good_info[,liar_positions,result_normdist,result_row]`
+`seed, success, duration, last_reduction_step, info, #liars, real_info, bad_info, good_info, liar_positions, result_normdist, result_row`
 
 ### Visualizations
-For both real and sim data:
 
- - 3D plot, x:N, y:D, z: number of successes; this for geom,const2,const3,const4.
- - 3D plot, x:N, y:D, z: last reduction step; this for geom,const2,const3,const4.
- - 3D plot, x:N, y:D, z: avg. duration of successful run; this for geom,const2,const3,const4.
- - 2D lineplot, x:N, y:sum over d in D (number of successed); all of geom,const2,const3,const4 in one plot.
+ - 3D plot, x:N, y:D, z: number of successes
+ - 3D plot, x:N, y:D, z: last reduction step
+ - 3D plot, x:N, y:D, z: avg. duration of successful run
+ - 2D lineplot, x:N, y: avg. of success over d in D
+ - etc.
 
 ### Why?
  - Gives a lot of insight into the parameter space.
@@ -56,6 +54,7 @@ For both real and sim data:
 
 ### Conclusions
 
- - Geometric bounds are better than any tested constant bounds, at least on simulated data. This is because they are closer to the real distribution of the bit-length data in D-shortest signatures. They are more aggressive than constant-2 bounds, and so will have more errors, but utilize the information way better. In simulated data, the errors with geom-bounds only arrise due to the random nature of the nonce generation process (e.g. after 4n signatures **around** n signatures will have at least 2 zero msb, this is only true asymptotically).
+ - GeometricD bounds are better than any tested constant bounds.
+ - GeometricN bounds are the best
  - Runtime of the attack is very short, so more exploration into larger lattices or more reduction (higher block sizes) can be performed.
- - There is some interesting behavior happening at dimension 90 with the geom bounds and at dimension around 80 with the const3 bounds, where the success rate suddenly jumps left as well as average block size increases. This might be due to some implementation details of fplll and its BKZ implementation though.
+ - There is some interesting behavior happening at dimension 90 with the geometricD bounds and at dimension around 80 with the const3 bounds, where the success rate suddenly jumps left as well as average block size increases. This might be due to some implementation details of fplll and its BKZ implementation though.

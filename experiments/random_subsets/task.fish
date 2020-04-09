@@ -22,7 +22,7 @@ set d "$argv[10]"
 echo $PBS_JOBID
 cat $PBS_NODEFILE
 
-trap "clean_scratch" TERM
+trap "clean_scratch 2>&1 >/dev/null" TERM
 
 function run_atk
     #args: curve1  hash2  input3  params4 
@@ -34,7 +34,7 @@ function run_atk
     if [ "$input_hash" != "$expected_hash" ]
         echo "Hash mismatch! $input_hash $expected_hash" >&2
         echo "Error!" >&2
-        rm -r $SCRATCHDIR
+        clean_scratch 2>&1 >/dev/null
         exit 1
     end
     for i in (seq 5)
@@ -82,7 +82,7 @@ function run_atk
             end
         end
     end
-    clean_scratch
+    clean_scratch 2>&1 >/dev/null
 end
 
 function get_fname
