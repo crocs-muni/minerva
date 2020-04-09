@@ -120,6 +120,15 @@ def map2row(data):
     N, D, S = remap(vals, 0)
     return N, D, S, None
 
+    def map2runs(data):
+        vals = {}
+        for run in data:
+            key = (run.N, run.d)
+            vals.setdefault(key, 0)
+            vals[key] += 1
+        N, D, R = remap(vals, 0)
+        return N, D, R, None
+
 def _map2single(data, attr):
     vals = {}
     cnts = {}
@@ -416,6 +425,8 @@ if __name__ == "__main__":
         plot_heatmap(datas, fig, map2blocks, "Block size", flat=args.flat, grid=grid)
     elif figure == "runtime":
         plot_heatmap(datas, fig, map2runtime, "Runtime (s)", flat=args.flat, grid=grid)
+    elif figure == "runs":
+        plot_heatmap(datas, fig, map2runs, "Total runs", flat=args.flat, grid=grid)
     elif figure == "liars":
         plot_heatmap(datas, fig, map2liars, "Liars", flat=args.flat, grid=grid)
     elif figure == "info":

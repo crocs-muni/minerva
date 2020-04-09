@@ -395,6 +395,8 @@ if __name__ == "__main__":
     parser.add_argument("--data", type=str, required=True)
     parser.add_argument("--bounds", type=str, required=True)
     parser.add_argument("--methods", type=str, required=True)
+    parser.add_argument("--recenter", type=str, required=True)
+    parser.add_argument("--e", type=str, required=True)
     parser.add_argument("--flat", action="store_true")
     parser.add_argument("figure", type=str)
 
@@ -404,14 +406,16 @@ if __name__ == "__main__":
     data_types = args.data.split(",")
     bound_types = args.bounds.split(",")
     method_types = args.methods.split(",")
+    recenter_types = args.recenter.split(",")
+    e_types = args.e.split(",")
     figure = args.figure
 
     runs = load_transformed("results/runs.pickle")
     fig = plt.figure(figsize=figsize)
     datas = {}
     for run in runs:
-        if run.dataset in data_types and run.bounds in bound_types and run.method in method_types:
-            s = datas.setdefault("_".join((run.dataset, run.bounds, run.method)), set())
+        if run.dataset in data_types and run.bounds in bound_types and run.method in method_types and run.recenter in recenter_types and run.e in e_types:
+            s = datas.setdefault("_".join((run.dataset, run.bounds, run.method, run.recenter, run.e)), set())
             s.add(run)
     if figure == "success":
         plot_heatmap(datas, fig, map2success, "Successes (out of 5)", flat=args.flat, grid=grid)

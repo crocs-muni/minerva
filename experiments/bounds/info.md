@@ -14,17 +14,17 @@ Geometric bounds are better. Geometric N bounds are the best. If the basic metho
  N = {500, 600, ..., 7000, 8000, 9000, 10000}
 
  - The bounds type:
-   * The constant bounds:
-   L = {1,2,3,4}
+    * The constant bounds:
+    L = {1,2,3,4}
 
-   * The geometricD bounds:
-   G = {1,2,3,4}
+    * The geometricD bounds:
+    G = {1,2,3,4}
 
-   * The geometricN bounds (only one type)
-   
-   * The known bounds (with or without recentering)
-   
-   * The templated bounds (with \(\alpha \in \{0.01, 0.1, 0.3\} = A\))
+    * The geometricN bounds (only one type)
+
+    * The known bounds (with or without recentering)
+
+    * The templated bounds (with \(\alpha \in \{0.01, 0.1, 0.3\} = A\))
 
  - The data source:
  data = {sim, sw, card, tpm}
