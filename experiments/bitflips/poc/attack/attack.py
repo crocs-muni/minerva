@@ -126,12 +126,12 @@ class Solver(Thread):
                          0])
 
     def babai_np(self, lattice, gso, target):
-        self.log("Start Babai's Nearest Plane.")
+        #self.log("Start Babai's Nearest Plane.")
         combs = gso.babai(target)
         return self.vector_from_coeffs(combs, lattice)
 
     def babai_round(self, lattice, gso, target):
-        self.log("Start Babai's Rounding.")
+        #self.log("Start Babai's Rounding.")
         b = np.empty((lattice.nrows, lattice.ncols), "f8")
         lattice.to_matrix(b)
         b = matrix_inverse(b)
@@ -143,7 +143,7 @@ class Solver(Thread):
             return False
         self.tried.add(guess)
         pubkey_guess = guess * self.curve.g
-        self.log("Guess: {}".format(hex(guess)))
+        #self.log("Guess: {}".format(hex(guess)))
         if pubkey == pubkey_guess:
             self.solution_func(guess)
             self.log("*** FOUND PRIVATE KEY *** : {}".format(hex(guess)))
@@ -288,18 +288,20 @@ class Solver(Thread):
         reds = [None] + self.params["betas"]
         for beta in reds:
             lattice = self.reduce_lattice(lattice, beta)
-            gso = GSO.Mat(lattice)
-            gso.update_gso()
+        gso = GSO.Mat(lattice)
+        gso.update_gso()
+        self.log("Done reducing.")        
 
         flip_num = 0
         for i in range(self.params["bitflips"] + 1):
+            start = time.time()
             combinations = list(itertools.combinations(range(dim), i))
             random.shuffle(combinations)
             for flips in combinations:
                 flipped_target = copy(target)
                 for flip in flips:
                     flipped_target[flip] += 2 * self.curve.group.n
-                closest = babai_func(lattice, flipped_target)
+                closest = babai_func(lattice, gso, flipped_target)
                 if self.verify_closest(closest, self.pubkey):
                     dist = self.dist(closest, target)
                     self.log("Result normdist: {}".format(dist))
@@ -307,6 +309,7 @@ class Solver(Thread):
                     self.log("Flip index: {}".format(flip_num))
                     return
                 flip_num += 1
+            self.log("Done flips: {} ({:.2f}s) ({})".format(i, time.time() - start, len(self.tried)))
 
 
 def parse_params(fname):

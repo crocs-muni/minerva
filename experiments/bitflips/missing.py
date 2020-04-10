@@ -13,6 +13,7 @@ if __name__ == "__main__":
     parser.add_argument("--methods", type=str, required=True)
     parser.add_argument("--recenter", type=str, required=True)
     parser.add_argument("--e", type=str, required=True)
+    parser.add_argument("-m", "--min", type=int, default=1, dest="m")
     args = parser.parse_args()
 
     data_types = args.data.split(",")
@@ -21,10 +22,11 @@ if __name__ == "__main__":
     recenter_types = args.recenter.split(",")
     e_types = args.e.split(",")
     runs = load_transformed("results/runs.pickle")
-    present = set()
+    present = {}
     for run in runs:
         if run.dataset in data_types and run.bounds in bound_types and run.method in method_types and run.recenter in recenter_types and run.e in e_types:
-            present.add((run.N, run.d, run.dataset, run.bounds, run.method, run.recenter, run.e))
+            present.setdefault((run.N, run.d, run.dataset, run.bounds, run.method, run.recenter, run.e), 0)
+            present[(run.N, run.d, run.dataset, run.bounds, run.method, run.recenter, run.e)] += 1
     for n in n_list:
         for d in d_list:
             for dataset in data_types:
@@ -32,5 +34,6 @@ if __name__ == "__main__":
                     for method in method_types:
                         for recenter in recenter_types:
                             for e in e_types:
-                                if (n, d, dataset, bounds, method, recenter, e) not in present:
+                                key = (n, d, dataset, bounds, method, recenter, e)
+                                if key not in present or present[key] < args.m:
                                     print(dataset, bounds, method, recenter, e, n, d, sep="_")

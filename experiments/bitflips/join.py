@@ -6,7 +6,7 @@ from os.path import join, exists
 from glob import glob
 import csv
 
-AttackRun = namedtuple("AttackRun", ("dataset", "bounds", "method", "recenter", "e", "N", "d","seed", "success", "time", "block_size", "info", "liars", "real_info", "bad_info", "good_info", "liar_positions", "normdist", "row"), defaults={"liar_positions": None, "normdist":None, "row": None})
+AttackRun = namedtuple("AttackRun", ("dataset", "bounds", "method", "recenter", "e", "N", "d","seed", "success", "time", "block_size", "info", "liars", "real_info", "bad_info", "good_info", "liar_positions", "normdist", "row", "required_flips", "flip_index"), defaults={"liar_positions": None, "normdist":None, "row": None, "required_flips": None, "flip_index": None})
 
 def load_data(data_type, bound_type, method_type, recenter, e, d_range, n_range):
     runs = set()
@@ -38,8 +38,14 @@ def load_data(data_type, bound_type, method_type, recenter, e, d_range, n_range)
                                 normdist = float(line[10])
                             row = None
                             if len(line) >= 12:
-                                row = int(line[11])
-                            run = AttackRun(data_type, bound_type, method_type, recenter, e, n, d, seed, success, time, block_size, info, liars, real_info, bad_info, good_info, liar_positions, normdist, row)
+                                row = None if not line[11] else int(line[11])
+                            required_flips = None
+                            if len(line) >= 13:
+                                required_flips = line[12]
+                            flip_index = None
+                            if len(line) >= 14:
+                                flip_index = None if not line[13] else int(line[13])
+                            run = AttackRun(data_type, bound_type, method_type, recenter, e, n, d, seed, success, time, block_size, info, liars, real_info, bad_info, good_info, liar_positions, normdist, row, required_flips, flip_index)
                             runs.add(run)
                         except:
                             continue
@@ -66,7 +72,7 @@ if __name__ == "__main__":
         for bounds in ("known", "knownre", "geom", "geom1", "geom2", "geom3", "geom4", "geomN", "const1", "const2", "const3", "const4", "template01", "template10", "template30", "templatem01", "templatem10", "templatem30"):
             for method in ("svp", "np", "round", "sieve"):
                 for recenter in ("yes", "no"):
-                    for e in ("1", "2", "3"):
+                    for e in ("0", "1", "2", "3"):
                         loaded = load_data(data, bounds, method, recenter, e, d_list, n_list)
                         all_runs.update(loaded)
                         if loaded:

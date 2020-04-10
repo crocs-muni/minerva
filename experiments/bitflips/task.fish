@@ -1,4 +1,3 @@
-
 #!/usr/bin/env fish
 
 # args: datatype curve hash input_file bounds method recenter e n d
@@ -26,7 +25,8 @@ cat $PBS_NODEFILE
 trap "clean_scratch 2>&1 >/dev/null" TERM
 
 function run_atk
-    #args: curve1  hash2  input3  params4 
+    #args: curve1  hash2  input3  params4  fname5
+    set fname "$argv[5]"
     set params_temp $SCRATCHDIR/params.json
     set input_temp $SCRATCHDIR/input.csv
     echo "$argv[4]" >$params_temp
@@ -39,7 +39,13 @@ function run_atk
         clean_scratch 2>&1 >/dev/null
         exit 1
     end
-    for i in (seq 5)
+    if [ ! \( -e "$fname" \) ]
+        set runs 5
+    else
+        set did (wc -l "$fname" | cut -d" " -f1)
+        set runs (math "5 - $did")
+    end
+    for i in (seq $runs)
         set start (date +%s)
         set out ($EXPERIMENT_DIR/poc/attack/attack.py $argv[1] $argv[2] $input_temp -p $params_temp)
         set stop (date +%s)
@@ -73,7 +79,7 @@ function run_atk
             set block_size (echo $out | grep -o "LLL")
         end
         set num_guesses (echo $out | grep -c "Guess")
-        echo "$random_seed,$found,$duration,$block_size,$info,$liars,$real_info,$bad_info,$good_info,$liar_positions,$result_normdist,$result_row,$required_flips,$flip_index"
+        echo "$random_seed,$found,$duration,$block_size,$info,$liars,$real_info,$bad_info,$good_info,$liar_positions,$result_normdist,$result_row,$required_flips,$flip_index" >>"$fname"
     end
     clean_scratch 2>&1 >/dev/null
 end
@@ -90,7 +96,7 @@ if string match -q -r -e "^const[0-9]+\$" "$bounds"
     set params (echo $params | jq ".bounds = {\"type\": \"constant\", \"value\": $bound}")
     set fname (get_fname $data "const$bound" $method $recenter $e $n $d)
     echo "Running $bounds $method $recenter"
-    run_atk "$curve" "$hash" "$input" "$params" >$fname
+    run_atk "$curve" "$hash" "$input" "$params" "$fname"
 else if string match -q -r -e "^geom[0-9]+\$" "$bounds"
     # run geom with the diff ls
     set bound (string match -r "[0-9]+" "$bounds" | tail -n1)
@@ -106,7 +112,7 @@ else if string match -q -r -e "^geom[0-9]+\$" "$bounds"
     set params (echo $params | jq ".bounds.parts = {\"128\": $p128, \"64\": $p64, \"32\": $p32, \"16\": $p16, \"8\": $p8, \"4\": $p4, \"2\": $p2, \"1\": $p1}")
     set fname (get_fname $data "geom$bound" $method $recenter $e $n $d)
     echo "Running $bounds" "$method $recenter"
-    run_atk "$curve" "$hash" "$input" "$params" >$fname
+    run_atk "$curve" "$hash" "$input" "$params" "$fname"
 else if string match -q -r -e "^geomN(i[0-9]+)?(m[0-9]+)?(x[0-9]+)?\$" "$bounds"
     set params (echo $params | jq ".bounds = {\"type\": \"geomN\"}")
     set iparam (echo "$bounds" | grep -E -o "i[0-9]+" | grep -E -o "[0-9]+")
@@ -124,12 +130,12 @@ else if string match -q -r -e "^geomN(i[0-9]+)?(m[0-9]+)?(x[0-9]+)?\$" "$bounds"
     end
     set fname (get_fname $data "geomN" $method $recenter $e $n $d)
     echo "Running $bounds $method $recenter"
-    run_atk "$curve" "$hash" "$input" "$params" >$fname
+    run_atk "$curve" "$hash" "$input" "$params" "$fname"
 else if string match -q -r -e "^known\$" "$bounds"
     set params (echo $params | jq ".bounds = {\"type\": \"known\"}")
     set fname (get_fname $data "known" $method $recenter $e $n $d)
     echo "Running known $method $recenter"
-    run_atk "$curve" "$hash" "$input" "$params" >$fname
+    run_atk "$curve" "$hash" "$input" "$params" "$fname"
 else if string match -q -r -e "^template[0-9]+\$" "$bounds"
     # alpha is a percent
     set alpha (string match -r "[0-9]+" "$bounds" | tail -n1)
@@ -140,7 +146,7 @@ else if string match -q -r -e "^template[0-9]+\$" "$bounds"
     set l (printf "%02i" "$l")
     set fname (get_fname $data "template$l" $method $recenter $e $n $d)
     echo "Running template$l $method $recenter"
-    run_atk "$curve" "$hash" "$input" "$params" >$fname
+    run_atk "$curve" "$hash" "$input" "$params" "$fname"
 end
 
 echo $fname

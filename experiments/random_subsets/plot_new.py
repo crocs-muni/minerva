@@ -78,11 +78,18 @@ def map2success(data):
     min_n = None
     for run in data:
         key = (run.N, run.d)
-        vals.setdefault(key, 0)
+        v = vals.setdefault(key, {})
+        v.setdefault(run.n_seed, 0)
         if run.success:
-            vals[key] += 1
+            v[run.n_seed] += 1
             if min_n is None or min_n > run.N:
                 min_n = run.N
+    for key in vals:
+        s = 0
+        for sc in vals[key].values():
+            if sc > 0:
+                s += 1
+        vals[key] = s
     N, D, S = remap(vals, 0)
     return N, D, S, min_n
 
@@ -313,58 +320,8 @@ def map2runtime(data):
         key = (run.N, run.d)
         vals.setdefault(key, 0)
         cnts.setdefault(key, 0)
-        #if run.success:
-        vals[key] += run.time
-        cnts[key] += 1
-    for key in vals:
-        if cnts[key] != 0:
-            vals[key] /= cnts[key]
-    N, D, R = remap(vals, 0)
-    return N, D, R, None
-
-def map2flipindex(data, dim):
-    flip_indices = [0 for _ in range(dim)]
-    count = 0
-    for run in data:
-        if run.d == dim:
-            count += 1
-            if run.required_flips:
-                flips = run.required_flips.split(";")
-                for flip in flips:
-                    i = int(flip)
-                    flip_indices[i] += 1
-    if count != 0:
-        flip_indices = [i/count for i in flip_indices]
-    return flip_indices
-
-def map2flipindex_heat(data):
-    vals = {}
-    cnts = {}
-    for run in data:
-        cnts.setdefault(run.d, 0)
-        cnts[run.d] += 1
-        if run.required_flips:
-            flips = run.required_flips.split(";")
-            for flip in flips:
-                i = int(flip)
-                key = (run.d, i)
-                vals.setdefault(key, 0)
-                vals[key] += 1
-    for key in vals:
-        if cnts[key[0]] != 0:
-            vals[key] /= cnts[key[0]]
-    N, D, V = remap(vals, 0, d_list, list(range(0, 50, 2)) + d_list)
-    return N, D, V, None
-
-def map2flipamount(data):
-    vals = {}
-    cnts = {}
-    for run in data:
-        key = (run.N, run.d)
-        vals.setdefault(key, 0)
-        cnts.setdefault(key, 0)
         if run.success:
-            vals[key] += len(run.required_flips.split(";")) if run.required_flips else 0
+            vals[key] += run.time
             cnts[key] += 1
     for key in vals:
         if cnts[key] != 0:
@@ -446,7 +403,7 @@ if __name__ == "__main__":
     parser.add_argument("--bounds", type=str, required=True)
     parser.add_argument("--methods", type=str, required=True)
     parser.add_argument("--recenter", type=str, required=True)
-    parser.add_argument("--e", type=str, required=True)
+    parser.add_argument("--c", type=str, required=True)
     parser.add_argument("--flat", action="store_true")
     parser.add_argument("figure", type=str)
 
@@ -457,15 +414,15 @@ if __name__ == "__main__":
     bound_types = args.bounds.split(",")
     method_types = args.methods.split(",")
     recenter_types = args.recenter.split(",")
-    e_types = args.e.split(",")
+    c_types = args.c.split(",")
     figure = args.figure
 
     runs = load_transformed("results/runs.pickle")
     fig = plt.figure(figsize=figsize)
     datas = {}
     for run in runs:
-        if run.dataset in data_types and run.bounds in bound_types and run.method in method_types and run.recenter in recenter_types and run.e in e_types:
-            s = datas.setdefault("_".join((run.dataset, run.bounds, run.method, run.recenter, run.e)), set())
+        if run.dataset in data_types and run.bounds in bound_types and run.method in method_types and run.recenter in recenter_types and run.c in c_types:
+            s = datas.setdefault("_".join((run.dataset, run.bounds, run.method, run.recenter, run.c)), set())
             s.add(run)
     if figure == "success":
         plot_heatmap(datas, fig, map2success, "Successes (out of 5)", flat=args.flat, grid=grid)
@@ -503,12 +460,6 @@ if __name__ == "__main__":
         plot_dim(datas, fig, map2liardepth, int(dim_match.group(1)), "liar depth (average)")
     elif dim_match := re.match("liarinfo\(([0-9]+)\)", figure):
         plot_dim(datas, fig, map2liarinfo, int(dim_match.group(1)), "liar info")
-    elif figure == "flipamount":
-        plot_heatmap(datas, fig, map2flipamount, "flip amount", flat=args.flat, grid=grid)
-    elif figure == "flipindex":
-        plot_heatmap(datas, fig, map2flipindex_heat, "flip index", flat=args.flat, grid=grid, ns=d_list, ds=list(range(0, 50, 2)) + d_list, xlabel="run.D", ylabel="D")
-    elif dim_match := re.match("flipindex\(([0-9]+)\)", figure):
-        plot_dim(datas, fig, map2flipindex, int(dim_match.group(1)), "flip index")
     else:
         print("Unknown figure.")
         exit(1)
