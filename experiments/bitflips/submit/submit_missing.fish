@@ -47,7 +47,7 @@ while read todo
         set hash "sha256"
         set fname "data_tpmfail_stm.csv"
     end
-    set minutes (math "$d * 2")
+    set minutes (math "$d * 2 + 60")
     set walltime "00:$minutes:00"
     echo $data $bounds $method $recenter $e $n $d
     set task_name minerva_""$data""_""$bounds""_""$method""_""$recenter""_""$e""_""$n""_$d

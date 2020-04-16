@@ -13,7 +13,7 @@ from matplotlib.ticker import (MultipleLocator, FormatStrFormatter)
 
 from join import load_transformed, AttackRun
 
-d_list = list(range(50, 142, 2))
+d_list = list(range(90, 104, 2))
 n_list = list(it.chain(range(500, 7100, 100), range(8000, 11000, 1000)))
 
 
@@ -90,6 +90,7 @@ def map2success(data):
             if sc > 0:
                 s += 1
         vals[key] = s
+    print(min_n)
     N, D, S = remap(vals, 0)
     return N, D, S, min_n
 
@@ -168,15 +169,18 @@ def map2badinfo(data):
     return _map2single(data, "bad_info")
 
 def map2success_avg(data):
-    res = {n: 0 for n in n_list}
-    cnts = {n: 0 for n in n_list}
+    res = {n: {} for n in n_list}
     for run in data:
-        cnts[run.N] += 1
+        v = res.setdefault(run.N, {})
+        v.setdefault(run.n_seed, 0)
         if run.success:
-            res[run.N] += 1
-    for n in n_list:
-        if cnts[n] != 0:
-            res[n] /= cnts[n]
+            v[run.n_seed] += 1
+    for key in res:
+        s = 0
+        for sc in res[key].values():
+            if sc > 0:
+                s += 1
+        res[key] = s / len(res[key])
     return [res[n] for n in n_list]
 
 
@@ -340,17 +344,27 @@ def plot_todim(datas, fig, map_func, ylabel):
     ax.legend()
 
 
-def plot_toN(datas, fig, map_func, ylabel):
+def plot_toN(datas, fig, map_func, ylabel, map_color=True, map_lines=True):
     ax = fig.add_subplot(111)
     ax.set_ylabel(ylabel)
     ax.xaxis.set_major_locator(MultipleLocator(1000))
     ax.xaxis.set_major_formatter(FormatStrFormatter("%d"))
     ax.xaxis.set_minor_locator(MultipleLocator(100))
     ax.set_xlabel("Number of signatures (N)")
+    lines = ["-", "--", "-.", ":"]
+    ls = []
+    cm = plt.get_cmap("tab20c")
+    cs = []
     for name, data in sorted(datas.items()):
-        value = map_func(data)
-        ax.plot(n_list, value, label=name)
+        value = map_func(data["runs"])
+        if name[-1] not in ls:
+            ls.append(name[-1])
+        if name[0] not in cs:
+            cs.append(name[0])
+        color = cm((cs.index(name[0]) * 4)/20)
+        ax.plot(n_list, value, label=data["name"], linestyle=lines[ls.index(name[-1])] if map_lines else "-", color=color if map_color else None)
     ax.legend()
+    return ax    
 
 
 def plot_dim(datas, fig, map_func, dim, ylabel):
@@ -363,36 +377,50 @@ def plot_dim(datas, fig, map_func, dim, ylabel):
     ax.legend()
 
 
-def plot_heatmap(datas, fig, map_func, zlabel, flat=True, grid=None, ns=n_list, ds=d_list, xlabel="Number of signatures (N)", ylabel="Dimension of matrix (D)"):
+def plot_heatmap(datas, fig, map_func, zlabel, flat=True, grid=None, ns=n_list, ds=d_list, xlabel="Number of signatures (N)", ylabel="Dimension of matrix (D)", vmin=None, vmax=None):
     gs = get_gridspec(datas, grid)
     i = 0
     axes = []
     for name, data in sorted(datas.items()):
+        ax_xlabel = ""
+        ax_ylabel = ""
+        rc = gs[i].get_rows_columns()
+        if rc[2] == rc[0] - 1:
+            ax_xlabel = xlabel
+        if rc[4] == 0:
+            ax_ylabel = ylabel
         if flat:
             ax = fig.add_subplot(gs[i])
         else:
             ax = fig.add_subplot(gs[i], projection="3d")
         axes.append(ax)
-        x, y, z, min_n = map_func(data)
+        print("mapping", name, data["name"])
+        x, y, z, min_n = map_func(data["runs"])
         X, Y, Z = reshape_grid(x, y, z, ns, ds)
         cmap = copy(cm.get_cmap("viridis"))
         cmap.set_under("black")
         #norm = Normalize(vmin=0.0001)
         norm = None
         if flat:
-            im = ax.pcolormesh(X, Y, Z, cmap=cmap, norm=norm)
+            im = ax.pcolormesh(X, Y, Z, cmap=cmap, norm=norm, vmin=vmin, vmax=vmax, rasterized=True)
             if min_n is not None:
-                ax.axvline(x=min_n, label="{}".format(min_n), color="red")
-            fig.colorbar(im)
+                ax.axvline(x=min_n, label="{}".format(min_n), color="red", linestyle="--", alpha=0.7)
         else:
             ax.plot_surface(X, Y, Z, cmap=cmap, norm=norm)
             ax.set_zlabel(zlabel)
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
-        ax.set_title(name)
+        ax.set_xlabel(ax_xlabel)
+        ax.set_ylabel(ax_ylabel)
+        ax.set_title(data["name"])
         i += 1
-    if not flat:
+    if flat:
+        if len(axes) == 1 or len(axes) == 2:
+            cbar_ax = fig.add_axes((0.93, 0.183, 0.02, 0.70))
+        else:
+            cbar_ax = fig.add_axes((0.93, 0.079, 0.02, 0.87))
+        fig.colorbar(im, cax=cbar_ax)
+    else:
         sync_viewing(axes, fig)
+    return axes
 
 
 if __name__ == "__main__":
@@ -422,8 +450,21 @@ if __name__ == "__main__":
     datas = {}
     for run in runs:
         if run.dataset in data_types and run.bounds in bound_types and run.method in method_types and run.recenter in recenter_types and run.c in c_types:
-            s = datas.setdefault("_".join((run.dataset, run.bounds, run.method, run.recenter, run.c)), set())
-            s.add(run)
+            #s = datas.setdefault("_".join((run.dataset, run.bounds, run.method, run.recenter, run.c)), set())
+            name_parts = []
+            if len(data_types) != 1:
+                name_parts.append(run.dataset)
+            if len(bound_types) != 1:
+                name_parts.append(run.bounds)
+            if len(method_types) != 1:
+                name_parts.append(run.method)
+            if len(recenter_types) != 1:
+                name_parts.append("recentering" if run.recenter == "yes" else "no recentering")
+            if len(c_types) != 1:
+                name_parts.append(str(run.c))
+            data = datas.setdefault((run.dataset, run.bounds, run.method, run.recenter, run.c)
+, {"name": " ".join(name_parts), "runs": set()})
+            data["runs"].add(run)
     if figure == "success":
         plot_heatmap(datas, fig, map2success, "Successes (out of 5)", flat=args.flat, grid=grid)
     elif figure == "normdist":
@@ -447,7 +488,7 @@ if __name__ == "__main__":
     elif figure == "realinfo":
         plot_heatmap(datas, fig, map2realinfo, "real info", flat=args.flat, grid=grid)
     elif figure == "success_avg":
-        plot_toN(datas, fig, map2success_avg, "Successes")
+        plot_toN(datas, fig, map2success_avg, "Success probability")
     elif figure == "liarpos":
         plot_heatmap(datas, fig, map2liarpos_heat, "liar amount", flat=args.flat, grid=grid, ns=d_list, ds=list(range(0, 50, 2)) + d_list, xlabel="run.D", ylabel="D")
     elif figure == "liardepth":

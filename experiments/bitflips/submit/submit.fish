@@ -29,7 +29,7 @@ else if [ "$data" = "tpm" ]
     set fname "data_tpmfail_stm.csv"
 end
 for d in (seq 50 2 140)
-    set minutes (math "$d * 2")
+    set minutes (math "$d * 2 + 60")
     set walltime "00:$minutes:00"
     for n in (seq 500 100 7000) (seq 8000 1000 10000)
         echo $data $bounds $method $recenter $n $d

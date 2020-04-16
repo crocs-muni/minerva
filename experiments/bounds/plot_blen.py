@@ -109,6 +109,7 @@ def load_data(data_type):
 def create_real(lines, N, d):
     N_sample = random.sample(lines, N)
     N_sorted = list(sorted(N_sample))
+    #N_sorted = N_sample
     lattice = N_sorted[:d]
     return list(map(lambda x: x[1], lattice))
 
@@ -139,6 +140,9 @@ def estimate_residuals(lines, N, d, bounds):
             j += 1
     return residuals
 
+def estimate_blens(lines, N, d, i):
+    n = 5000
+    return [create_real(lines, N, d)[i] for _ in range(n)]
 
 if __name__ == "__main__":
     import argparse
@@ -150,6 +154,7 @@ if __name__ == "__main__":
     parser.add_argument("--bounds", type=str, required=True)
     parser.add_argument("N", type=int)
     parser.add_argument("d", type=int)
+    parser.add_argument("i", type=int)
 
     #plt.style.use("bmh")
     cm = cm.get_cmap("tab10")
@@ -159,36 +164,41 @@ if __name__ == "__main__":
     bound_types = args.bounds.split(",")
     fig = plt.figure(figsize=(11,3.6), dpi=120)
     ax = fig.add_subplot()
-    max_bound = 0
-    data = {}
     for data_type in sorted(data_types):
         lines = load_data(data_type)
-        bounds = create_real(lines, args.N, args.d)
-        data[data_type] = lines
-        ax.step(range(args.d), bounds, label=data_type + " (sample)", where="post", linestyle=":", color=cm(0/10)) # + f" ({sum(bounds)}b)"
-        if max(bounds) > max_bound:
-            max_bound = max(bounds)
-    
-    for data_type in sorted(data_types):
+        blens = estimate_blens(lines, args.N, args.d, args.i)
+        h = ax.hist(blens, bins=max(blens) - min(blens), histtype="step", align="left", label=data_type)
         for bound_type in sorted(bound_types):
-            bound_name = "geom" if bound_type == "geomN" else bound_type
             bounds = create_bounds(data_type, bound_type, args.N, args.d)
-            mean_err, std_err = estimate_errors(data[data_type], args.N, args.d, bounds)
-            residuals = estimate_residuals(data[data_type], args.N, args.d, bounds)
-            ax.boxplot(residuals, manage_ticks=False, notch=True, bootstrap=1000)
-            mean_residuals = [np.mean(residual) for residual in residuals]
-            ax.plot(range(1, args.d + 1), mean_residuals, label=" - ".join((data_type, bound_name)), linestyle="--", color=cm(1/10)) #  ({np.mean(mean_residuals):.2f})
-            
-            ax.step(range(args.d), bounds, label=bound_name, where="post", color=cm(2/10)) #  + f" ({sum(bounds)}b) ({mean_err:.2f}e, {std_err:.2f})"
-            if max(bounds) > max_bound:
-                max_bound = max(bounds)
-    ax.axhline(y=0, color="black", lw=2)
+            ax.axvline(x=bounds[args.i], color="black", label=" ".join((data_type, bound_type)))
+    # for data_type in sorted(data_types):
+        # lines = load_data(data_type)
+        # bounds = create_real(lines, args.N, args.d)
+        # data[data_type] = lines
+        # ax.step(range(args.d), bounds, label=data_type, where="post", linestyle=":", color=cm(0/10)) # + f" ({sum(bounds)}b)"
+        # if max(bounds) > max_bound:
+            # max_bound = max(bounds)
+    # 
+    # for data_type in sorted(data_types):
+        # for bound_type in sorted(bound_types):
+            # bounds = create_bounds(data_type, bound_type, args.N, args.d)
+            # mean_err, std_err = estimate_errors(data[data_type], args.N, args.d, bounds)
+            # residuals = estimate_residuals(data[data_type], args.N, args.d, bounds)
+            # ax.boxplot(residuals, manage_ticks=False)
+            # mean_residuals = [np.mean(residual) for residual in residuals]
+            # ax.plot(range(args.d), mean_residuals, label=" - ".join((data_type, bound_type)) + f" residuals", linestyle="--", color=cm(1/10)) #  ({np.mean(mean_residuals):.2f})
+            # 
+            # ax.step(range(args.d), bounds, label=bound_type, where="post", color=cm(2/10)) #  + f" ({sum(bounds)}b) ({mean_err:.2f}e, {std_err:.2f})"
+            # if max(bounds) > max_bound:
+                # max_bound = max(bounds)
+    # ax.axhline(y=0, color="black", lw=2)
+    # ax.legend()
+    # #ax.set_ylim((0, max_bound + 1))
+    # ax.set_xlabel("index")
+    # ax.set_ylabel("bound")
+    # ax.set_xticks(list(range(0, args.d + 10, 10)))
+    # #ax.set_xticks([0,10,20,30,40,50,60,70,80,90,100])
+    # #ax.xaxis.set_major_locator(MultipleLocator())
     ax.legend()
-    #ax.set_ylim((0, max_bound + 1))
-    ax.set_xlabel("index")
-    ax.set_ylabel("bound")
-    ax.set_xticks(list(range(0, args.d + 10, 10)))
-    #ax.set_xticks([0,10,20,30,40,50,60,70,80,90,100])
-    #ax.xaxis.set_major_locator(MultipleLocator())
     plt.show()
     

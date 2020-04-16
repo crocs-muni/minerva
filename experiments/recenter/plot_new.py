@@ -12,50 +12,10 @@ from matplotlib.colors import Normalize
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter)
 
 from join import load_transformed, AttackRun
+from plot_utils import plot_toN, plot_dim, plot_heatmap
 
 d_list = list(range(50, 142, 2))
 n_list = list(it.chain(range(500, 7100, 100), range(8000, 11000, 1000)))
-
-
-def get_gridspec(datas, grid):
-    if grid is None:
-        w = ceil(sqrt(len(datas)))
-        if len(datas) == 2:
-            gs = gridspec.GridSpec(2, 1)
-        else:
-            gs = gridspec.GridSpec(w, w)
-    else:
-        gs = gridspec.GridSpec(*grid)
-    return gs
-
-
-def reshape_grid(x, y, z, n_list, d_list):
-    X, Y = np.meshgrid(n_list, d_list)
-    zs = np.array(z)
-    Z = zs.reshape(X.shape, order="F")
-    return X, Y, Z
-
-
-def sync_viewing(axes, fig):
-    def on_move(event):
-        for ax in axes:
-            if event.inaxes == ax:
-                break
-        else:
-            return
-
-        for axx in axes:
-            if axx != ax:
-                if ax.button_pressed in ax._rotate_btn:
-                    axx.view_init(elev=ax.elev, azim=ax.azim)
-                elif ax.button_pressed in ax._zoom_btn:
-                    axx.set_xlim3d(ax.get_xlim3d())
-                    axx.set_ylim3d(ax.get_ylim3d())
-                    axx.set_zlim3d(ax.get_zlim3d())
-        fig.canvas.draw_idle()
-
-    fig.canvas.mpl_connect("motion_notify_event", on_move)
-
 
 def remap(vals, default, ns=n_list, ds=d_list):
     N = []
@@ -84,6 +44,7 @@ def map2success(data):
             if min_n is None or min_n > run.N:
                 min_n = run.N
     N, D, S = remap(vals, 0)
+    print(min_n)
     return N, D, S, min_n
 
 
@@ -120,14 +81,14 @@ def map2row(data):
     N, D, S = remap(vals, 0)
     return N, D, S, None
 
-    def map2runs(data):
-        vals = {}
-        for run in data:
-            key = (run.N, run.d)
-            vals.setdefault(key, 0)
-            vals[key] += 1
-        N, D, R = remap(vals, 0)
-        return N, D, R, None
+def map2runs(data):
+    vals = {}
+    for run in data:
+        key = (run.N, run.d)
+        vals.setdefault(key, 0)
+        vals[key] += 1
+    N, D, R = remap(vals, 0)
+    return N, D, R, None
 
 def _map2single(data, attr):
     vals = {}
@@ -333,61 +294,6 @@ def plot_todim(datas, fig, map_func, ylabel):
     ax.legend()
 
 
-def plot_toN(datas, fig, map_func, ylabel):
-    ax = fig.add_subplot(111)
-    ax.set_ylabel(ylabel)
-    ax.xaxis.set_major_locator(MultipleLocator(1000))
-    ax.xaxis.set_major_formatter(FormatStrFormatter("%d"))
-    ax.xaxis.set_minor_locator(MultipleLocator(100))
-    ax.set_xlabel("Number of signatures (N)")
-    for name, data in sorted(datas.items()):
-        value = map_func(data)
-        ax.plot(n_list, value, label=name)
-    ax.legend()
-
-
-def plot_dim(datas, fig, map_func, dim, ylabel):
-    ax = fig.add_subplot(111)
-    ax.set_ylabel(ylabel)
-    ax.set_xlabel("Index")
-    for name, data in sorted(datas.items()):
-        value = map_func(data, dim)
-        ax.plot(range(dim), value, label=name)
-    ax.legend()
-
-
-def plot_heatmap(datas, fig, map_func, zlabel, flat=True, grid=None, ns=n_list, ds=d_list, xlabel="Number of signatures (N)", ylabel="Dimension of matrix (D)"):
-    gs = get_gridspec(datas, grid)
-    i = 0
-    axes = []
-    for name, data in sorted(datas.items()):
-        if flat:
-            ax = fig.add_subplot(gs[i])
-        else:
-            ax = fig.add_subplot(gs[i], projection="3d")
-        axes.append(ax)
-        x, y, z, min_n = map_func(data)
-        X, Y, Z = reshape_grid(x, y, z, ns, ds)
-        cmap = copy(cm.get_cmap("viridis"))
-        cmap.set_under("black")
-        #norm = Normalize(vmin=0.0001)
-        norm = None
-        if flat:
-            im = ax.pcolormesh(X, Y, Z, cmap=cmap, norm=norm)
-            if min_n is not None:
-                ax.axvline(x=min_n, label="{}".format(min_n), color="red")
-            fig.colorbar(im)
-        else:
-            ax.plot_surface(X, Y, Z, cmap=cmap, norm=norm)
-            ax.set_zlabel(zlabel)
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
-        ax.set_title(name)
-        i += 1
-    if not flat:
-        sync_viewing(axes, fig)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--figsize", type=str, default="7x4")
@@ -409,14 +315,24 @@ if __name__ == "__main__":
     figure = args.figure
 
     runs = load_transformed("results/runs.pickle")
-    fig = plt.figure(figsize=figsize)
+    fig = plt.figure(figsize=figsize, dpi=120)
     datas = {}
     for run in runs:
         if run.dataset in data_types and run.bounds in bound_types and run.method in method_types and run.recenter in recenter_types:
-            s = datas.setdefault("_".join((run.dataset, run.bounds, run.method, run.recenter)), set())
-            s.add(run)
+            name_parts = []
+            if len(data_types) != 1:
+                name_parts.append(run.dataset)
+            if len(bound_types) != 1:
+                name_parts.append(run.bounds)
+            if len(method_types) != 1:
+                name_parts.append(run.method)
+            if len(recenter_types) != 1:
+                name_parts.append("recentering" if run.recenter == "yes" else "no recentering")
+            name = "_".join(name_parts)
+            data = datas.setdefault((run.dataset, run.bounds, run.method, run.recenter), {"name": " ".join(name_parts), "runs": set()})
+            data["runs"].add(run)
     if figure == "success":
-        plot_heatmap(datas, fig, map2success, "Successes (out of 5)", flat=args.flat, grid=grid)
+        plot_heatmap(datas, fig, map2success, "Successes (out of 5)", flat=args.flat, grid=grid, vmin=0, vmax=5, ns=n_list, ds=d_list)
     elif figure == "normdist":
         plot_heatmap(datas, fig, map2normdist, "Normdist", flat=args.flat, grid=grid)
     elif figure == "row":
@@ -438,7 +354,7 @@ if __name__ == "__main__":
     elif figure == "realinfo":
         plot_heatmap(datas, fig, map2realinfo, "real info", flat=args.flat, grid=grid)
     elif figure == "success_avg":
-        plot_toN(datas, fig, map2success_avg, "Successes")
+        plot_toN(datas, fig, map2success_avg, "Success probability")
     elif figure == "liarpos":
         plot_heatmap(datas, fig, map2liarpos_heat, "liar amount", flat=args.flat, grid=grid, ns=d_list, ds=list(range(0, 50, 2)) + d_list, xlabel="run.D", ylabel="D")
     elif figure == "liardepth":
@@ -454,5 +370,17 @@ if __name__ == "__main__":
     else:
         print("Unknown figure.")
         exit(1)
-    fig.tight_layout()
+    # fig.tight_layout()
+    fig.subplots_adjust(top=0.881,
+    bottom=0.183,
+    left=0.063,
+    right=0.9,
+    hspace=0.201,
+    wspace=0.16)
+    # fig.subplots_adjust(top=0.881,
+    # bottom=0.183,
+    # left=0.126,
+    # right=0.882,
+    # hspace=0.201,
+    # wspace=0.147)
     plt.show()

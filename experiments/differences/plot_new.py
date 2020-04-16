@@ -12,6 +12,7 @@ from matplotlib.colors import Normalize
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter)
 
 from join import load_transformed, AttackRun
+from plot_utils import plot_heatmap, plot_todim, plot_toN, plot_dim
 
 d_list = list(range(50, 142, 2))
 n_list = list(it.chain(range(500, 7100, 100), range(8000, 11000, 1000)))
@@ -322,71 +323,6 @@ def map2runtime(data):
     return N, D, R, None
 
 
-def plot_todim(datas, fig, map_func, ylabel):
-    ax = fig.add_subplot(111)
-    ax.set_ylabel(ylabel)
-    ax.set_xlabel("Dimension of matrix (D)")
-    for name, data in sorted(datas.items()):
-        value = map_func(data)
-        ax.plot(d_list, value, label=name)
-    ax.legend()
-
-
-def plot_toN(datas, fig, map_func, ylabel):
-    ax = fig.add_subplot(111)
-    ax.set_ylabel(ylabel)
-    ax.xaxis.set_major_locator(MultipleLocator(1000))
-    ax.xaxis.set_major_formatter(FormatStrFormatter("%d"))
-    ax.xaxis.set_minor_locator(MultipleLocator(100))
-    ax.set_xlabel("Number of signatures (N)")
-    for name, data in sorted(datas.items()):
-        value = map_func(data)
-        ax.plot(n_list, value, label=name)
-    ax.legend()
-
-
-def plot_dim(datas, fig, map_func, dim, ylabel):
-    ax = fig.add_subplot(111)
-    ax.set_ylabel(ylabel)
-    ax.set_xlabel("Index")
-    for name, data in sorted(datas.items()):
-        value = map_func(data, dim)
-        ax.plot(range(dim), value, label=name)
-    ax.legend()
-
-
-def plot_heatmap(datas, fig, map_func, zlabel, flat=True, grid=None, ns=n_list, ds=d_list, xlabel="Number of signatures (N)", ylabel="Dimension of matrix (D)"):
-    gs = get_gridspec(datas, grid)
-    i = 0
-    axes = []
-    for name, data in sorted(datas.items()):
-        if flat:
-            ax = fig.add_subplot(gs[i])
-        else:
-            ax = fig.add_subplot(gs[i], projection="3d")
-        axes.append(ax)
-        x, y, z, min_n = map_func(data)
-        X, Y, Z = reshape_grid(x, y, z, ns, ds)
-        cmap = copy(cm.get_cmap("viridis"))
-        cmap.set_under("black")
-        #norm = Normalize(vmin=0.0001)
-        norm = None
-        if flat:
-            im = ax.pcolormesh(X, Y, Z, cmap=cmap, norm=norm)
-            if min_n is not None:
-                ax.axvline(x=min_n, label="{}".format(min_n), color="red")
-            fig.colorbar(im)
-        else:
-            ax.plot_surface(X, Y, Z, cmap=cmap, norm=norm)
-            ax.set_zlabel(zlabel)
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
-        ax.set_title(name)
-        i += 1
-    if not flat:
-        sync_viewing(axes, fig)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--figsize", type=str, default="7x4")
@@ -408,14 +344,25 @@ if __name__ == "__main__":
     figure = args.figure
 
     runs = load_transformed("results/runs.pickle")
-    fig = plt.figure(figsize=figsize)
+    fig = plt.figure(figsize=figsize, dpi=120)
     datas = {}
     for run in runs:
         if run.dataset in data_types and run.bounds in bound_types and run.method in method_types and run.diff in diff:
-            s = datas.setdefault("_".join((run.dataset, run.bounds, run.method, run.diff)), set())
-            s.add(run)
+            name_parts = []
+            if len(data_types) != 1:
+                name_parts.append(run.dataset)
+            if len(bound_types) != 1:
+                name_parts.append(run.bounds)
+            if len(method_types) != 1:
+                name_parts.append(run.method)
+            if len(diff) != 1:
+                name_parts.append("differences" if run.diff == "diff" else "no differences")
+            ddiff = "a" if run.diff == "nodiff" else "b"
+            data = datas.setdefault((run.dataset, run.bounds, run.method, ddiff), {"name": " ".join(name_parts), "runs": set()})
+            data["runs"].add(run)
+
     if figure == "success":
-        plot_heatmap(datas, fig, map2success, "Successes (out of 5)", flat=args.flat, grid=grid)
+        plot_heatmap(datas, fig, map2success, "Successes (out of 5)", flat=args.flat, grid=grid, vmin=0, vmax=5)
     elif figure == "normdist":
         plot_heatmap(datas, fig, map2normdist, "Normdist", flat=args.flat, grid=grid)
     elif figure == "row":
