@@ -1,2 +1,0 @@
-*.pickle filter=lfs diff=lfs merge=lfs -text
-*.pickle !text !filter !merge !diff

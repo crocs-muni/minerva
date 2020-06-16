@@ -1,7 +1,10 @@
-# [![Minerva](logo.png)](https://minerva.crocs.fi.muni.cz/)
+# [![Minerva](logo.png)](https://minerva.crocs.fi.muni.cz/ "Minerva")
 
-This package contains three tools for testing the presence of the vulnerability as well
-as proof-of-concept code exploiting it.
+This package contains the tools for testing the presence of the Minerva vulnerability as well
+as proof-of-concept code exploiting it. It also contains datasets and code for experiments
+performed in the paper.
+
+See [our website](https://minerva.crocs.fi.muni.cz/) for more info.
 
 ## CPLC checker
 
