@@ -115,7 +115,7 @@ def attack(curve, hash, data, pubkey, params):
             print("[ ] Starting attack thread {}.".format(thread_name))
             sub_sigs = list(signatures[:params["dimension"]])
             solution = lambda skey: solution_found.set()
-            solve_thread = Solver(curve, sub_sigs, pubkey, params, solution)
+            solve_thread = Solver(curve, sub_sigs, pubkey, params, solution, len(signatures))
             solve_thread.name = thread_name
             solve_thread.daemon = True
             threads[len(signatures)] = solve_thread

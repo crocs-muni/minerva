@@ -1,6 +1,6 @@
 # A log of the setup
 
-This is what it took to setup the libs, virt and stuff.
+This is what it took to setup the libs, virt and stuff on [Metacentrum](https://metacentrum.cz/en/).
 
 ```
 module add python/3.8.0

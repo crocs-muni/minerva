@@ -29,7 +29,7 @@
 
   <target name="help">
   	<echo message="Available targets:"/>
-  	<echo message=" - build - Builds the applet."/>
+  	<echo message=" - build - Builds the applets."/>
   	<echo message=" - clean - Cleans the project."/> 
   </target>
 

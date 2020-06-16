@@ -1,4 +1,4 @@
-# Minerva
+# [![Minerva](logo.png)](https://minerva.crocs.fi.muni.cz/)
 
 This package contains three tools for testing the presence of the vulnerability as well
 as proof-of-concept code exploiting it.
@@ -20,4 +20,4 @@ The tester uses ECDH to test presence of bit-length timing leakage using a custo
 ## Data & Experiments
 
 The `data` directory contains the datasets collected for the paper. The experiments directory
-contains experiments run on the Metacentrum grid computing network.
+contains experiments run on the [Metacentrum](https://metacentrum.cz/en/) grid computing network.

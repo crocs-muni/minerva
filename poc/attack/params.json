@@ -1,6 +1,5 @@
 {
 	"attack": {
-		"method": "svp",
 		"type": "full",
 		"skip": 50,
 		"start": 3000,
@@ -9,14 +8,6 @@
 		"seed": null
 	},
 	"max_threads": 2,
-	"pruning_radius": 100,
-	"dimension": 155,
-	"bounds": {
-		"16": 6,
-		"8": 5,
-		"4": 4,
-		"2": 3,
-		"1": 2
-	},
-	"betas": [23, 34, 40, 45]
+	"dimension": 90,
+	"betas": [15, 20, 30, 40, 45, 48, 51, 53, 55]
 }

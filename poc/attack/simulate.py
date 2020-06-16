@@ -17,7 +17,7 @@ if __name__ == "__main__":
     parser.add_argument("hash", type=str)
     parser.add_argument("count", type=int)
     parser.add_argument("--base", type=int, default=0)
-    parser.add_argument("--t-time", type=int, default=1)
+    parser.add_argument("--iter-time", type=int, default=1)
     parser.add_argument("--sdev", type=float, default=None)
     args = parser.parse_args()
 
