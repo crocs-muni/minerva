@@ -1,0 +1,792 @@
+changeset:   55972:ba9b9d315492
+tag:         tip
+user:        J08nY <johny@neuromancer.sk>
+date:        Sun Aug 25 00:54:10 2019 +0200
+summary:     Fix timing leak in binary field curves.
+
+diff -r f3630a2d3d5c -r ba9b9d315492 src/jdk.crypto.ec/share/native/libsunec/impl/ec.c
+--- a/src/jdk.crypto.ec/share/native/libsunec/impl/ec.c	Tue Aug 13 14:59:29 2019 +0200
++++ b/src/jdk.crypto.ec/share/native/libsunec/impl/ec.c	Sun Aug 25 00:54:10 2019 +0200
+@@ -81,128 +81,119 @@
+     return PR_TRUE;
+ }
+ 
++SECStatus
++ec_point_mul(const ECParams *params, const mp_int *k, const SECItem *pointP,
++   SECItem *pointQ, int kmflag, int reduce, int timing)
++{
++   mp_int Px, Py, Qx, Qy;
++   ECGroup *group = NULL;
++   SECStatus rv = SECFailure;
++   mp_err err = MP_OKAY;
++   unsigned int len;
++
++   len = (params->fieldID.size + 7) >> 3;
++   if (pointP != NULL) {
++      if ((pointP->data[0] != EC_POINT_FORM_UNCOMPRESSED) ||
++          (pointP->len != (2 * len + 1))) {
++         return SECFailure;
++      };
++   }
++
++   MP_DIGITS(&Px) = 0;
++   MP_DIGITS(&Py) = 0;
++   MP_DIGITS(&Qx) = 0;
++   MP_DIGITS(&Qy) = 0;
++   CHECK_MPI_OK( mp_init(&Px, kmflag) );
++   CHECK_MPI_OK( mp_init(&Py, kmflag) );
++   CHECK_MPI_OK( mp_init(&Qx, kmflag) );
++   CHECK_MPI_OK( mp_init(&Qy, kmflag) );
++
++   if (pointP != NULL) {
++      CHECK_MPI_OK(mp_read_unsigned_octets(&Px, pointP->data + 1, (mp_size)len));
++      CHECK_MPI_OK(mp_read_unsigned_octets(&Py, pointP->data + 1 + len, (mp_size)len));
++   }
++
++   if (params->name != ECCurve_noName) {
++      group = ECGroup_fromName(params->name, kmflag);
++   }
++
++   if (group == NULL)
++      goto cleanup;
++
++   if (pointP != NULL) {
++      CHECK_MPI_OK( ECPoint_mul(group, k, &Px, &Py, &Qx, &Qy, reduce, timing) );
++   } else {
++      CHECK_MPI_OK( ECPoint_mul(group, k, NULL, NULL, &Qx, &Qy, reduce, timing) );
++   }
++
++   /* Construct the SECItem representation of point Q */
++   pointQ->data[0] = EC_POINT_FORM_UNCOMPRESSED;
++   CHECK_MPI_OK( mp_to_fixlen_octets(&Qx, pointQ->data + 1,
++                                     (mp_size) len) );
++   CHECK_MPI_OK( mp_to_fixlen_octets(&Qy, pointQ->data + 1 + len,
++                                     (mp_size) len) );
++
++   rv = SECSuccess;
++cleanup:
++   ECGroup_free(group);
++   mp_clear(&Px);
++   mp_clear(&Py);
++   mp_clear(&Qx);
++   mp_clear(&Qy);
++   if (err) {
++      MP_TO_SEC_ERROR(err);
++      rv = SECFailure;
++   }
++
++   return rv;
++}
++
+ /*
+  * Computes scalar point multiplication pointQ = k1 * G + k2 * pointP for
+  * the curve whose parameters are encoded in params with base point G.
+  */
+ SECStatus
+ ec_points_mul(const ECParams *params, const mp_int *k1, const mp_int *k2,
+-             const SECItem *pointP, SECItem *pointQ, int kmflag, int timing)
++             const SECItem *pointP, SECItem *pointQ, int kmflag, int reduce, int timing)
+ {
+     mp_int Px, Py, Qx, Qy;
+     mp_int Gx, Gy, order, irreducible, a, b;
+-#if 0 /* currently don't support non-named curves */
+-    unsigned int irr_arr[5];
+-#endif
+     ECGroup *group = NULL;
+     SECStatus rv = SECFailure;
+     mp_err err = MP_OKAY;
+     unsigned int len;
+ 
+-#if EC_DEBUG
+-    int i;
+-    char mpstr[256];
+-
+-    printf("ec_points_mul: params [len=%d]:", params->DEREncoding.len);
+-    for (i = 0; i < params->DEREncoding.len; i++)
+-            printf("%02x:", params->DEREncoding.data[i]);
+-    printf("\n");
+-
+-        if (k1 != NULL) {
+-                mp_tohex((mp_int*)k1, mpstr);
+-                printf("ec_points_mul: scalar k1: %s\n", mpstr);
+-                mp_todecimal((mp_int*)k1, mpstr);
+-                printf("ec_points_mul: scalar k1: %s (dec)\n", mpstr);
+-        }
+-
+-        if (k2 != NULL) {
+-                mp_tohex((mp_int*)k2, mpstr);
+-                printf("ec_points_mul: scalar k2: %s\n", mpstr);
+-                mp_todecimal((mp_int*)k2, mpstr);
+-                printf("ec_points_mul: scalar k2: %s (dec)\n", mpstr);
+-        }
+-
+-        if (pointP != NULL) {
+-                printf("ec_points_mul: pointP [len=%d]:", pointP->len);
+-                for (i = 0; i < pointP->len; i++)
+-                        printf("%02x:", pointP->data[i]);
+-                printf("\n");
+-        }
+-#endif
+-
+-        /* NOTE: We only support uncompressed points for now */
+-        len = (params->fieldID.size + 7) >> 3;
+-        if (pointP != NULL) {
+-                if ((pointP->data[0] != EC_POINT_FORM_UNCOMPRESSED) ||
+-                        (pointP->len != (2 * len + 1))) {
+-                        return SECFailure;
+-                };
+-        }
++     /* NOTE: We only support uncompressed points for now */
++     len = (params->fieldID.size + 7) >> 3;
++     if (pointP != NULL) {
++             if ((pointP->data[0] != EC_POINT_FORM_UNCOMPRESSED) ||
++                     (pointP->len != (2 * len + 1))) {
++                     return SECFailure;
++             };
++     }
+ 
+-        MP_DIGITS(&Px) = 0;
+-        MP_DIGITS(&Py) = 0;
+-        MP_DIGITS(&Qx) = 0;
+-        MP_DIGITS(&Qy) = 0;
+-        MP_DIGITS(&Gx) = 0;
+-        MP_DIGITS(&Gy) = 0;
+-        MP_DIGITS(&order) = 0;
+-        MP_DIGITS(&irreducible) = 0;
+-        MP_DIGITS(&a) = 0;
+-        MP_DIGITS(&b) = 0;
+-        CHECK_MPI_OK( mp_init(&Px, kmflag) );
+-        CHECK_MPI_OK( mp_init(&Py, kmflag) );
+-        CHECK_MPI_OK( mp_init(&Qx, kmflag) );
+-        CHECK_MPI_OK( mp_init(&Qy, kmflag) );
+-        CHECK_MPI_OK( mp_init(&Gx, kmflag) );
+-        CHECK_MPI_OK( mp_init(&Gy, kmflag) );
+-        CHECK_MPI_OK( mp_init(&order, kmflag) );
+-        CHECK_MPI_OK( mp_init(&irreducible, kmflag) );
+-        CHECK_MPI_OK( mp_init(&a, kmflag) );
+-        CHECK_MPI_OK( mp_init(&b, kmflag) );
+-
+-        if ((k2 != NULL) && (pointP != NULL)) {
+-                /* Initialize Px and Py */
+-                CHECK_MPI_OK( mp_read_unsigned_octets(&Px, pointP->data + 1, (mp_size) len) );
+-                CHECK_MPI_OK( mp_read_unsigned_octets(&Py, pointP->data + 1 + len, (mp_size) len) );
+-        }
+-
+-        /* construct from named params, if possible */
+-        if (params->name != ECCurve_noName) {
+-                group = ECGroup_fromName(params->name, kmflag);
+-        }
++     MP_DIGITS(&Px) = 0;
++     MP_DIGITS(&Py) = 0;
++     MP_DIGITS(&Qx) = 0;
++     MP_DIGITS(&Qy) = 0;
++     CHECK_MPI_OK( mp_init(&Px, kmflag) );
++     CHECK_MPI_OK( mp_init(&Py, kmflag) );
++     CHECK_MPI_OK( mp_init(&Qx, kmflag) );
++     CHECK_MPI_OK( mp_init(&Qy, kmflag) );
+ 
+-#if 0 /* currently don't support non-named curves */
+-        if (group == NULL) {
+-                /* Set up mp_ints containing the curve coefficients */
+-                CHECK_MPI_OK( mp_read_unsigned_octets(&Gx, params->base.data + 1,
+-                                                                                  (mp_size) len) );
+-                CHECK_MPI_OK( mp_read_unsigned_octets(&Gy, params->base.data + 1 + len,
+-                                                                                  (mp_size) len) );
+-                SECITEM_TO_MPINT( params->order, &order );
+-                SECITEM_TO_MPINT( params->curve.a, &a );
+-                SECITEM_TO_MPINT( params->curve.b, &b );
+-                if (params->fieldID.type == ec_field_GFp) {
+-                        SECITEM_TO_MPINT( params->fieldID.u.prime, &irreducible );
+-                        group = ECGroup_consGFp(&irreducible, &a, &b, &Gx, &Gy, &order, params->cofactor);
+-                } else {
+-                        SECITEM_TO_MPINT( params->fieldID.u.poly, &irreducible );
+-                        irr_arr[0] = params->fieldID.size;
+-                        irr_arr[1] = params->fieldID.k1;
+-                        irr_arr[2] = params->fieldID.k2;
+-                        irr_arr[3] = params->fieldID.k3;
+-                        irr_arr[4] = 0;
+-                        group = ECGroup_consGF2m(&irreducible, irr_arr, &a, &b, &Gx, &Gy, &order, params->cofactor);
+-                }
+-        }
+-#endif
+-        if (group == NULL)
+-                goto cleanup;
++     CHECK_MPI_OK( mp_read_unsigned_octets(&Px, pointP->data + 1, (mp_size) len) );
++     CHECK_MPI_OK( mp_read_unsigned_octets(&Py, pointP->data + 1 + len, (mp_size) len) );
+ 
+-        if ((k2 != NULL) && (pointP != NULL)) {
+-                CHECK_MPI_OK( ECPoints_mul(group, k1, k2, &Px, &Py, &Qx, &Qy, timing) );
+-        } else {
+-                CHECK_MPI_OK( ECPoints_mul(group, k1, NULL, NULL, NULL, &Qx, &Qy, timing) );
+-    }
++     /* construct from named params, if possible */
++     if (params->name != ECCurve_noName) {
++             group = ECGroup_fromName(params->name, kmflag);
++     }
++
++     if (group == NULL)
++             goto cleanup;
++
++     CHECK_MPI_OK( ECPoints_mul(group, k1, k2, &Px, &Py, &Qx, &Qy, reduce, timing) );
++
+ 
+     /* Construct the SECItem representation of point Q */
+     pointQ->data[0] = EC_POINT_FORM_UNCOMPRESSED;
+@@ -213,25 +204,12 @@
+ 
+     rv = SECSuccess;
+ 
+-#if EC_DEBUG
+-    printf("ec_points_mul: pointQ [len=%d]:", pointQ->len);
+-    for (i = 0; i < pointQ->len; i++)
+-            printf("%02x:", pointQ->data[i]);
+-    printf("\n");
+-#endif
+-
+ cleanup:
+     ECGroup_free(group);
+     mp_clear(&Px);
+     mp_clear(&Py);
+     mp_clear(&Qx);
+     mp_clear(&Qy);
+-    mp_clear(&Gx);
+-    mp_clear(&Gy);
+-    mp_clear(&order);
+-    mp_clear(&irreducible);
+-    mp_clear(&a);
+-    mp_clear(&b);
+     if (err) {
+         MP_TO_SEC_ERROR(err);
+         rv = SECFailure;
+@@ -255,9 +233,6 @@
+     mp_err err = MP_OKAY;
+     int len;
+ 
+-#if EC_DEBUG
+-    printf("ec_NewKey called\n");
+-#endif
+     k.dp = (mp_digit*)NULL;
+ 
+     if (!ecParams || !privKey || !privKeyBytes || (privKeyLen < 0)) {
+@@ -334,7 +309,7 @@
+         (mp_size) len) );
+ 
+     /* key generation does not support timing mitigation */
+-    rv = ec_points_mul(ecParams, &k, NULL, NULL, &(key->publicValue), kmflag, /*timing*/ 0);
++    rv = ec_point_mul(ecParams, &k, NULL, &(key->publicValue), kmflag, 1, /*timing*/ 0);
+     if (rv != SECSuccess) goto cleanup;
+     *privKey = key;
+ 
+@@ -344,13 +319,7 @@
+         PORT_FreeArena(arena, PR_TRUE);
+     }
+ 
+-#if EC_DEBUG
+-    printf("ec_NewKey returning %s\n",
+-        (rv == SECSuccess) ? "success" : "failure");
+-#endif
+-
+     return rv;
+-
+ }
+ 
+ /* Generates a new EC key pair. The private key is a supplied
+@@ -463,10 +432,6 @@
+     if (privKeyBytes) {
+         PORT_ZFree(privKeyBytes, len * 2);
+     }
+-#if EC_DEBUG
+-    printf("EC_NewKey returning %s\n",
+-        (rv == SECSuccess) ? "success" : "failure");
+-#endif
+ 
+     return rv;
+ }
+@@ -578,9 +543,6 @@
+     mp_int k; /* to hold the private value */
+     mp_int cofactor;
+     mp_err err = MP_OKAY;
+-#if EC_DEBUG
+-    int i;
+-#endif
+ 
+     if (!publicValue || !ecParams || !privateValue ||
+         !derivedSecret) {
+@@ -612,7 +574,7 @@
+ 
+     /* Multiply our private key and peer's public point */
+     /* ECDH doesn't support timing mitigation */
+-    if ((ec_points_mul(ecParams, NULL, &k, publicValue, &pointQ, kmflag, /*timing*/ 0) != SECSuccess) ||
++    if ((ec_point_mul(ecParams, &k, publicValue, &pointQ, kmflag, 1, /*timing*/ 0) != SECSuccess) ||
+         ec_point_at_infinity(&pointQ))
+         goto cleanup;
+ 
+@@ -624,13 +586,6 @@
+ 
+     rv = SECSuccess;
+ 
+-#if EC_DEBUG
+-    printf("derived_secret:\n");
+-    for (i = 0; i < derivedSecret->len; i++)
+-        printf("%02x:", derivedSecret->data[i]);
+-    printf("\n");
+-#endif
+-
+ cleanup:
+     mp_clear(&k);
+ 
+@@ -662,10 +617,6 @@
+     unsigned olen;   /* length in bytes of the base point order */
+     unsigned int orderBitSize;
+ 
+-#if EC_DEBUG
+-    char mpstr[256];
+-#endif
+-
+     /* Initialize MPI integers. */
+     /* must happen before the first potential call to cleanup */
+     MP_DIGITS(&x1) = 0;
+@@ -707,17 +658,16 @@
+     CHECK_MPI_OK( mp_read_unsigned_octets(&k, kb, kblen) );
+     /* Make sure k is in the interval [1, n-1] */
+     if ((mp_cmp_z(&k) <= 0) || (mp_cmp(&k, &n) >= 0)) {
+-#if EC_DEBUG
+-        printf("k is outside [1, n-1]\n");
+-        mp_tohex(&k, mpstr);
+-        printf("k : %s \n", mpstr);
+-        mp_tohex(&n, mpstr);
+-        printf("n : %s \n", mpstr);
+-#endif
+         PORT_SetError(SEC_ERROR_NEED_RANDOM);
+         goto cleanup;
+     }
+ 
++    /* Fix bit-length of random nonce to prevent leakage. */
++    mp_add(&k, &n, &k);
++    if (mpl_significant_bits(&k) != mpl_significant_bits(&n)) {
++        mp_add(&k, &n, &k);
++    }
++
+     /*
+     ** ANSI X9.62, Section 5.3.2, Step 2
+     **
+@@ -726,7 +676,7 @@
+     kGpoint.len = 2*flen + 1;
+     kGpoint.data = PORT_Alloc(2*flen + 1, kmflag);
+     if ((kGpoint.data == NULL) ||
+-        (ec_points_mul(ecParams, &k, NULL, NULL, &kGpoint, kmflag, timing)
++        (ec_point_mul(ecParams, &k, NULL, &kGpoint, kmflag, 0, timing)
+             != SECSuccess))
+         goto cleanup;
+ 
+@@ -770,21 +720,6 @@
+         mpl_rsh(&s,&s,digest->len*8 - orderBitSize);
+     }
+ 
+-#if EC_DEBUG
+-    mp_todecimal(&n, mpstr);
+-    printf("n : %s (dec)\n", mpstr);
+-    mp_todecimal(&d, mpstr);
+-    printf("d : %s (dec)\n", mpstr);
+-    mp_tohex(&x1, mpstr);
+-    printf("x1: %s\n", mpstr);
+-    mp_todecimal(&s, mpstr);
+-    printf("digest: %s (decimal)\n", mpstr);
+-    mp_todecimal(&r, mpstr);
+-    printf("r : %s (dec)\n", mpstr);
+-    mp_tohex(&r, mpstr);
+-    printf("r : %s\n", mpstr);
+-#endif
+-
+     CHECK_MPI_OK( mp_invmod(&k, &n, &k) );      /* k = k**-1 mod n */
+     CHECK_MPI_OK( mp_mulmod(&d, &r, &n, &d) );  /* d = d * r mod n */
+     CHECK_MPI_OK( mp_addmod(&s, &d, &n, &s) );  /* s = s + d mod n */
+@@ -834,12 +769,6 @@
+         MP_TO_SEC_ERROR(err);
+         rv = SECFailure;
+     }
+-
+-#if EC_DEBUG
+-    printf("ECDSA signing with seed %s\n",
+-        (rv == SECSuccess) ? "succeeded" : "failed");
+-#endif
+-
+    return rv;
+ }
+ 
+@@ -874,11 +803,6 @@
+         PORT_ZFree(kBytes, len * 2);
+     }
+ 
+-#if EC_DEBUG
+-    printf("ECDSA signing %s\n",
+-        (rv == SECSuccess) ? "succeeded" : "failed");
+-#endif
+-
+     return rv;
+ }
+ 
+@@ -902,11 +826,6 @@
+     unsigned olen;  /* length in bytes of the base point order */
+     unsigned int orderBitSize;
+ 
+-#if EC_DEBUG
+-    char mpstr[256];
+-    printf("ECDSA verification called\n");
+-#endif
+-
+     /* Initialize MPI integers. */
+     /* must happen before the first potential call to cleanup */
+     MP_DIGITS(&r_) = 0;
+@@ -988,17 +907,6 @@
+         mpl_rsh(&u1,&u1,digest->len*8- orderBitSize);
+     }
+ 
+-#if EC_DEBUG
+-    mp_todecimal(&r_, mpstr);
+-    printf("r_: %s (dec)\n", mpstr);
+-    mp_todecimal(&s_, mpstr);
+-    printf("s_: %s (dec)\n", mpstr);
+-    mp_todecimal(&c, mpstr);
+-    printf("c : %s (dec)\n", mpstr);
+-    mp_todecimal(&u1, mpstr);
+-    printf("digest: %s (dec)\n", mpstr);
+-#endif
+-
+     CHECK_MPI_OK( mp_mulmod(&u1, &c, &n, &u1) );  /* u1 = u1 * c mod n */
+ 
+     /*
+@@ -1016,7 +924,7 @@
+     ** If the result, C, is the point at infinity, reject the signature
+     */
+     /* verification does not support timing mitigation */
+-    if (ec_points_mul(ecParams, &u1, &u2, &key->publicValue, &pointC, kmflag, /*timing*/ 0)
++    if (ec_points_mul(ecParams, &u1, &u2, &key->publicValue, &pointC, kmflag, 1, /*timing*/ 0)
+         != SECSuccess) {
+         rv = SECFailure;
+         goto cleanup;
+@@ -1036,13 +944,6 @@
+     */
+     CHECK_MPI_OK( mp_mod(&x1, &n, &v) );
+ 
+-#if EC_DEBUG
+-    mp_todecimal(&r_, mpstr);
+-    printf("r_: %s (dec)\n", mpstr);
+-    mp_todecimal(&v, mpstr);
+-    printf("v : %s (dec)\n", mpstr);
+-#endif
+-
+     /*
+     ** ANSI X9.62, Section 5.4.4, Step 3
+     **
+@@ -1055,17 +956,6 @@
+         rv = SECSuccess; /* Signature verified. */
+     }
+ 
+-#if EC_DEBUG
+-    mp_todecimal(&u1, mpstr);
+-    printf("u1: %s (dec)\n", mpstr);
+-    mp_todecimal(&u2, mpstr);
+-    printf("u2: %s (dec)\n", mpstr);
+-    mp_tohex(&x1, mpstr);
+-    printf("x1: %s\n", mpstr);
+-    mp_todecimal(&v, mpstr);
+-    printf("v : %s (dec)\n", mpstr);
+-#endif
+-
+ cleanup:
+     mp_clear(&r_);
+     mp_clear(&s_);
+@@ -1082,10 +972,5 @@
+         rv = SECFailure;
+     }
+ 
+-#if EC_DEBUG
+-    printf("ECDSA verification %s\n",
+-        (rv == SECSuccess) ? "succeeded" : "failed");
+-#endif
+-
+     return rv;
+ }
+diff -r f3630a2d3d5c -r ba9b9d315492 src/jdk.crypto.ec/share/native/libsunec/impl/ec2_aff.c
+--- a/src/jdk.crypto.ec/share/native/libsunec/impl/ec2_aff.c	Tue Aug 13 14:59:29 2019 +0200
++++ b/src/jdk.crypto.ec/share/native/libsunec/impl/ec2_aff.c	Sun Aug 25 00:54:10 2019 +0200
+@@ -331,7 +331,7 @@
+      *    is the point at infinity.
+      */
+         /* timing mitigation is not supported */
+-        MP_CHECKOK( ECPoint_mul(group, &group->order, px, py, &pxt, &pyt, /*timing*/ 0) );
++        MP_CHECKOK( ECPoint_mul(group, &group->order, px, py, &pxt, &pyt, 0, /*timing*/ 0) );
+         if (ec_GF2m_pt_is_inf_aff(&pxt, &pyt) != MP_YES) {
+                 res = MP_NO;
+                 goto CLEANUP;
+diff -r f3630a2d3d5c -r ba9b9d315492 src/jdk.crypto.ec/share/native/libsunec/impl/ecl.h
+--- a/src/jdk.crypto.ec/share/native/libsunec/impl/ecl.h	Tue Aug 13 14:59:29 2019 +0200
++++ b/src/jdk.crypto.ec/share/native/libsunec/impl/ecl.h	Sun Aug 25 00:54:10 2019 +0200
+@@ -72,7 +72,7 @@
+  * are assumed to be NOT field-encoded. */
+ mp_err ECPoint_mul(const ECGroup *group, const mp_int *k, const mp_int *px,
+                                    const mp_int *py, mp_int *qx, mp_int *qy,
+-                                   int timing);
++                                   int reduce, int timing);
+ 
+ /* Elliptic curve scalar-point multiplication. Computes Q(x, y) = k1 * G +
+  * k2 * P(x, y), where G is the generator (base point) of the group of
+@@ -80,7 +80,7 @@
+  * be NOT field-encoded. */
+ mp_err ECPoints_mul(const ECGroup *group, const mp_int *k1,
+                                         const mp_int *k2, const mp_int *px, const mp_int *py,
+-                                        mp_int *qx, mp_int *qy, int timing);
++                                        mp_int *qx, mp_int *qy, int reduce, int timing);
+ 
+ /* Validates an EC public key as described in Section 5.2.2 of X9.62.
+  * Returns MP_YES if the public key is valid, MP_NO if the public key
+diff -r f3630a2d3d5c -r ba9b9d315492 src/jdk.crypto.ec/share/native/libsunec/impl/ecl_mult.c
+--- a/src/jdk.crypto.ec/share/native/libsunec/impl/ecl_mult.c	Tue Aug 13 14:59:29 2019 +0200
++++ b/src/jdk.crypto.ec/share/native/libsunec/impl/ecl_mult.c	Sun Aug 25 00:54:10 2019 +0200
+@@ -51,23 +51,23 @@
+ mp_err
+ ECPoint_mul(const ECGroup *group, const mp_int *k, const mp_int *px,
+                         const mp_int *py, mp_int *rx, mp_int *ry,
+-                        int timing)
++                        int reduce, int timing)
+ {
+         mp_err res = MP_OKAY;
+         mp_int kt;
+ 
+         ARGCHK((k != NULL) && (group != NULL), MP_BADARG);
+-        MP_DIGITS(&kt) = 0;
+ 
+-        /* want scalar to be less than or equal to group order */
+-        if (mp_cmp(k, &group->order) > 0) {
+-                MP_CHECKOK(mp_init(&kt, FLAG(k)));
+-                MP_CHECKOK(mp_mod(k, &group->order, &kt));
+-        } else {
+-                MP_SIGN(&kt) = MP_ZPOS;
+-                MP_USED(&kt) = MP_USED(k);
+-                MP_ALLOC(&kt) = MP_ALLOC(k);
+-                MP_DIGITS(&kt) = MP_DIGITS(k);
++        MP_SIGN(&kt) = MP_ZPOS;
++        MP_USED(&kt) = MP_USED(k);
++        MP_ALLOC(&kt) = MP_ALLOC(k);
++        MP_DIGITS(&kt) = MP_DIGITS(k);
++        if (reduce) {
++           /* want scalar to be less than or equal to group order */
++           if (mp_cmp(k, &group->order) > 0) {
++              MP_CHECKOK(mp_init(&kt, FLAG(k)));
++              MP_CHECKOK(mp_mod(k, &group->order, &kt));
++           }
+         }
+ 
+         if ((px == NULL) || (py == NULL)) {
+@@ -114,24 +114,15 @@
+         mp_int sx, sy;
+ 
+         ARGCHK(group != NULL, MP_BADARG);
+-        ARGCHK(!((k1 == NULL)
+-                         && ((k2 == NULL) || (px == NULL)
+-                                 || (py == NULL))), MP_BADARG);
+-
+-        /* if some arguments are not defined used ECPoint_mul */
+-        if (k1 == NULL) {
+-                return ECPoint_mul(group, k2, px, py, rx, ry, timing);
+-        } else if ((k2 == NULL) || (px == NULL) || (py == NULL)) {
+-                return ECPoint_mul(group, k1, NULL, NULL, rx, ry, timing);
+-        }
++        ARGCHK(!((k1 == NULL) || (k2 == NULL) || (px == NULL) || (py == NULL)), MP_BADARG);
+ 
+         MP_DIGITS(&sx) = 0;
+         MP_DIGITS(&sy) = 0;
+         MP_CHECKOK(mp_init(&sx, FLAG(k1)));
+         MP_CHECKOK(mp_init(&sy, FLAG(k1)));
+ 
+-        MP_CHECKOK(ECPoint_mul(group, k1, NULL, NULL, &sx, &sy, timing));
+-        MP_CHECKOK(ECPoint_mul(group, k2, px, py, rx, ry, timing));
++        MP_CHECKOK(ECPoint_mul(group, k1, NULL, NULL, &sx, &sy, 1, timing));
++        MP_CHECKOK(ECPoint_mul(group, k2, px, py, rx, ry, 1, timing));
+ 
+         if (group->meth->field_enc) {
+                 MP_CHECKOK(group->meth->field_enc(&sx, &sx, group->meth));
+@@ -172,16 +163,8 @@
+         int ai, bi, d;
+ 
+         ARGCHK(group != NULL, MP_BADARG);
+-        ARGCHK(!((k1 == NULL)
+-                         && ((k2 == NULL) || (px == NULL)
+-                                 || (py == NULL))), MP_BADARG);
++        ARGCHK(!((k1 == NULL) || (k2 == NULL) || (px == NULL) || (py == NULL)), MP_BADARG);
+ 
+-        /* if some arguments are not defined used ECPoint_mul */
+-        if (k1 == NULL) {
+-                return ECPoint_mul(group, k2, px, py, rx, ry, timing);
+-        } else if ((k2 == NULL) || (px == NULL) || (py == NULL)) {
+-                return ECPoint_mul(group, k1, NULL, NULL, rx, ry, timing);
+-        }
+ 
+         /* initialize precomputation table */
+         for (i = 0; i < 4; i++) {
+@@ -313,7 +296,7 @@
+ mp_err
+ ECPoints_mul(const ECGroup *group, const mp_int *k1, const mp_int *k2,
+                          const mp_int *px, const mp_int *py, mp_int *rx, mp_int *ry,
+-                         int timing)
++                         int reduce, int timing)
+ {
+         mp_err res = MP_OKAY;
+         mp_int k1t, k2t;
+@@ -324,28 +307,20 @@
+ 
+         ARGCHK(group != NULL, MP_BADARG);
+ 
+-        /* want scalar to be less than or equal to group order */
+-        if (k1 != NULL) {
+-                if (mp_cmp(k1, &group->order) >= 0) {
+-                        MP_CHECKOK(mp_init(&k1t, FLAG(k1)));
+-                        MP_CHECKOK(mp_mod(k1, &group->order, &k1t));
+-                        k1p = &k1t;
+-                } else {
+-                        k1p = k1;
+-                }
+-        } else {
+-                k1p = k1;
+-        }
+-        if (k2 != NULL) {
+-                if (mp_cmp(k2, &group->order) >= 0) {
+-                        MP_CHECKOK(mp_init(&k2t, FLAG(k2)));
+-                        MP_CHECKOK(mp_mod(k2, &group->order, &k2t));
+-                        k2p = &k2t;
+-                } else {
+-                        k2p = k2;
+-                }
+-        } else {
+-                k2p = k2;
++        k1p = k1;
++        k2p = k2;
++        if (reduce) {
++           /* want scalar to be less than or equal to group order */
++           if (k1 != NULL && mp_cmp(k1, &group->order) >= 0) {
++              MP_CHECKOK(mp_init(&k1t, FLAG(k1)));
++              MP_CHECKOK(mp_mod(k1, &group->order, &k1t));
++              k1p = &k1t;
++           }
++           if (k2 != NULL && mp_cmp(k2, &group->order) >= 0) {
++              MP_CHECKOK(mp_init(&k2t, FLAG(k2)));
++              MP_CHECKOK(mp_mod(k2, &group->order, &k2t));
++              k2p = &k2t;
++           }
+         }
+ 
+         /* if points_mul is defined, then use it */
+diff -r f3630a2d3d5c -r ba9b9d315492 src/jdk.crypto.ec/share/native/libsunec/impl/ecp_aff.c
+--- a/src/jdk.crypto.ec/share/native/libsunec/impl/ecp_aff.c	Tue Aug 13 14:59:29 2019 +0200
++++ b/src/jdk.crypto.ec/share/native/libsunec/impl/ecp_aff.c	Sun Aug 25 00:54:10 2019 +0200
+@@ -342,7 +342,7 @@
+      *    is the point at infinity.
+      */
+         /* timing mitigation is not supported */
+-        MP_CHECKOK( ECPoint_mul(group, &group->order, px, py, &pxt, &pyt, /*timing*/ 0) );
++        MP_CHECKOK( ECPoint_mul(group, &group->order, px, py, &pxt, &pyt, 0, /*timing*/ 0) );
+         if (ec_GFp_pt_is_inf_aff(&pxt, &pyt) != MP_YES) {
+                 res = MP_NO;
+                 goto CLEANUP;
+diff -r f3630a2d3d5c -r ba9b9d315492 src/jdk.crypto.ec/share/native/libsunec/impl/ecp_jac.c
+--- a/src/jdk.crypto.ec/share/native/libsunec/impl/ecp_jac.c	Tue Aug 13 14:59:29 2019 +0200
++++ b/src/jdk.crypto.ec/share/native/libsunec/impl/ecp_jac.c	Sun Aug 25 00:54:10 2019 +0200
+@@ -434,16 +434,7 @@
+         MP_DIGITS(&rz) = 0;
+ 
+         ARGCHK(group != NULL, MP_BADARG);
+-        ARGCHK(!((k1 == NULL)
+-                         && ((k2 == NULL) || (px == NULL)
+-                                 || (py == NULL))), MP_BADARG);
+-
+-        /* if some arguments are not defined used ECPoint_mul */
+-        if (k1 == NULL) {
+-                return ECPoint_mul(group, k2, px, py, rx, ry, timing);
+-        } else if ((k2 == NULL) || (px == NULL) || (py == NULL)) {
+-                return ECPoint_mul(group, k1, NULL, NULL, rx, ry, timing);
+-        }
++        ARGCHK(!((k1 == NULL) || (k2 == NULL) || (px == NULL) || (py == NULL)), MP_BADARG);
+ 
+         /* initialize precomputation table */
+         for (i = 0; i < 4; i++) {
+diff -r f3630a2d3d5c -r ba9b9d315492 src/jdk.crypto.ec/share/native/libsunec/impl/ecp_jm.c
+--- a/src/jdk.crypto.ec/share/native/libsunec/impl/ecp_jm.c	Tue Aug 13 14:59:29 2019 +0200
++++ b/src/jdk.crypto.ec/share/native/libsunec/impl/ecp_jm.c	Sun Aug 25 00:54:10 2019 +0200
+@@ -232,7 +232,7 @@
+         mp_int raz4, tpaz4;
+         mp_int scratch[MAX_SCRATCH];
+         signed char *naf = NULL;
+-        int i, orderBitSize;
++        int i, bitSize;
+         int numDoubles, numAdds, extraDoubles, extraAdds;
+ 
+         MP_DIGITS(&rz) = 0;
+@@ -296,13 +296,16 @@
+         /* R = inf */
+         MP_CHECKOK(ec_GFp_pt_set_inf_jac(rx, ry, &rz));
+ 
+-        orderBitSize = mpl_significant_bits(&group->order);
++        bitSize = mpl_significant_bits(&group->order);
++        if (mpl_significant_bits(n) > bitSize) {
++           bitSize = mpl_significant_bits(n);
++        }
+ 
+         /* Allocate memory for NAF */
+ #ifdef _KERNEL
+-        naf = (signed char *) kmem_alloc((orderBitSize + 1), FLAG(n));
++        naf = (signed char *) kmem_alloc((bitSize + 1), FLAG(n));
+ #else
+-        naf = (signed char *) malloc(sizeof(signed char) * (orderBitSize + 1));
++        naf = (signed char *) malloc(sizeof(signed char) * (bitSize + 1));
+         if (naf == NULL) {
+                 res = MP_MEM;
+                 goto CLEANUP;
+@@ -310,12 +313,12 @@
+ #endif
+ 
+         /* Compute 5NAF */
+-        ec_compute_wNAF(naf, orderBitSize, n, 5);
++        ec_compute_wNAF(naf, bitSize, n, 5);
+ 
+         numAdds = 0;
+-        numDoubles = orderBitSize;
++        numDoubles = bitSize;
+         /* wNAF method */
+-        for (i = orderBitSize; i >= 0; i--) {
++        for (i = bitSize; i >= 0; i--) {
+ 
+                 if (ec_GFp_pt_is_inf_jac(rx, ry, &rz) == MP_YES) {
+                   numDoubles--;
+@@ -351,9 +354,9 @@
+                 /* two bits of extra adds */
+                 extraAdds = timing & 0x3;
+                 timing >>= 2;
+-                /* Window size is 5, so the maximum number of additions is ceil(orderBitSize/5) */
+-                /* This is the same as (orderBitSize + 4) / 5 */
+-                for(i = numAdds; i <= (orderBitSize + 4) / 5 + extraAdds; i++) {
++                /* Window size is 5, so the maximum number of additions is ceil(bitSize/5) */
++                /* This is the same as (bitSize + 4) / 5 */
++                for(i = numAdds; i <= (bitSize + 4) / 5 + extraAdds; i++) {
+                         ec_GFp_pt_add_jm_aff(&tpx, &tpy, &tpz, &tpaz4,
+                                                                  &precomp[9 + (i % 3)][0],
+                                                                  &precomp[9 + (i % 3)][1], &tpx, &tpy,
+@@ -363,7 +366,7 @@
+                 /* two bits of extra doubles */
+                 extraDoubles = timing & 0x3;
+                 timing >>= 2;
+-                for(i = numDoubles; i <= orderBitSize + extraDoubles; i++) {
++                for(i = numDoubles; i <= bitSize + extraDoubles; i++) {
+                         ec_GFp_pt_dbl_jm(&tpx, &tpy, &tpz, &tpaz4, &tpx, &tpy, &tpz,
+                                              &tpaz4, scratch, group);
+                 }
+@@ -388,7 +391,7 @@
+         mp_clear(&rz);
+         mp_clear(&raz4);
+ #ifdef _KERNEL
+-        kmem_free(naf, (orderBitSize + 1));
++        kmem_free(naf, (bitSize + 1));
+ #else
+         free(naf);
+ #endif
+

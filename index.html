@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="application-name" content="Minerva"/>
+    <meta property="og:title" content="Minerva">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://minerva.crocs.fi.muni.cz/assets/img/logo.png">
+    <meta property="og:description" content="Minerva is a group of side-channel vulnerabilities in implementations of ECDSA in programmable smart cards and cryptographic software libraries. This page describes our attack which allows for practical recovery of the long-term private key.">
+    <meta property="og:url" content="https://minerva.crocs.fi.muni.cz/">
+    <title>Minerva</title>
+    <link rel="icon" href="assets/img/owl_tiny.ico" type="image/x-icon">
+    <!-- Fonts -->
+    <link rel="stylesheet" href="assets/font/fontawesome-all.min.css">
+    <link rel="stylesheet" href="assets/font/roboto.css">
+    <link rel="stylesheet" href="assets/font/ibmplexmono.css">
+    <link rel="stylesheet" href="assets/font/exo.css">
+
+    <!-- KaTex -->
+    <link rel="stylesheet" href="assets/lib/katex/katex.min.css">
+    <script defer src="assets/lib/katex/katex.min.js"></script>
+    <script defer src="assets/lib/katex/contrib/auto-render.min.js" onload="renderMathInElement(document.body, {macros: {'\\gmod': '\\ (\\mathrm{mod}\\ #1)'}});"></script>
+
+    <!-- Bootstrap & misc -->
+    <link rel="stylesheet" href="assets/lib/css/bootstrap.min.css">
+    <link rel="stylesheet" href="assets/lib/css/ekko-lightbox.css">
+    <link rel="stylesheet" href="assets/lib/css/pseudocode.min.css">
+    <link rel="stylesheet" href="assets/lib/css/hamburgers.css">
+    <script src="assets/lib/js/jquery-3.5.1.min.js"></script>
+    <script src="assets/lib/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/lib/js/ekko-lightbox.min.js"></script>
+    <script src="assets/lib/js/pseudocode.min.js"></script>
+    <script src="assets/lib/js/jquery.stickybits.min.js"></script>
+
+    <!-- Custom -->
+    <link rel="stylesheet" href="assets/index.css">
+    <script src="assets/index.js"></script>
+
+	<!-- Matomo -->
+	<script type="text/javascript">
+	  var _paq = window._paq || [];
+	  /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
+	  _paq.push(["setDocumentTitle", document.domain + "/" + document.title]);
+	  _paq.push(["setCookieDomain", "*.crocs.fi.muni.cz"]);
+	  _paq.push(["setDomains", ["*.crocs.fi.muni.cz"]]);
+	  _paq.push(["setDoNotTrack", true]);
+	  _paq.push(["disableCookies"]);
+	  _paq.push(['trackPageView']);
+	  _paq.push(['enableLinkTracking']);
+	  (function() {
+	    var u="https://fadmin.fi.muni.cz/piwik/";
+	    _paq.push(['setTrackerUrl', u+'matomo.php']);
+	    _paq.push(['setSiteId', '29']);
+	    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+	    g.type='text/javascript'; g.async=true; g.defer=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+	  })();
+	</script>
+	<!-- End Matomo Code -->
+</head>
+<body data-spy="scroll" data-target="#navbar" data-offset="20">
+<nav id="navbar" class="navbar navbar-light bg-light">
+    <button id="menu" class="hamburger hamburger--spring" type="button" onclick="toc_display($(this))">
+        <span class="hamburger-box">
+            <span class="hamburger-inner"></span>
+        </span>
+        <span id="menu-label">Minerva</span>
+    </button>
+    <a id="nav-heading" class="navbar-brand" href="#">Minerva</a>
+    <nav class="nav nav-pills flex-column">
+        <a class="nav-link" href="#affected">Affected</a>
+        <a class="nav-link" href="#secure-impl">Secure</a>
+        <a class="nav-link" href="#qa">Q&amp;A</a>
+        <a class="nav-link" href="#poc">PoC</a>
+        <a class="nav-link" href="#details">Details</a>
+        <nav class="nav nav-pills flex-column">
+            <a class="nav-link ml-3 my-1" href="#details-leakage">Leakage</a>
+            <a class="nav-link ml-3 my-1" href="#details-hnp">Hidden Number Problem</a>
+            <a class="nav-link ml-3 my-1" href="#details-improvements">Attack improvements</a>
+            <a class="nav-link ml-3 my-1" href="#details-reasons">Root causes</a>
+        </nav>
+        <a class="nav-link" href="#disclosure">Disclosure</a>
+        <a class="nav-link" href="#team">Team</a>
+        <a class="nav-link" href="#timeline">Updates</a>
+        <a class="nav-link" href="#media">Media</a>
+        <a class="nav-link" href="#acknowledgements">Acknowledgements</a>
+        <a class="nav-link" href="#references">References</a>
+    </nav>
+</nav>
+<div style="min-height: 100vh; display: flex; flex-direction: column; justify-content: center; background: linear-gradient(180deg, #e5e5e5, #ebebeb)">
+    <img src="assets/img/Leaky_loops_mid.webp" style="width: 100%" alt="Minerva: Leaky loops">
+</div>
+<div id="middle">
+    <article>
+        <header>
+            <div id="logo">
+                <svg class="anaglyph-svg" xmlns="http://www.w3.org/2000/svg" width="400" height="125" viewBox="0 0 400 125">
+                    <g transform="scale(1.3 1.3)">
+                        <circle cx="60.848999" cy="25.961" r="5.8740001"></circle>
+                        <ellipse transform="rotate(83.321 45.64056875 30.815676)" cx="45.639999" cy="30.816999" rx="3.349"
+                                 ry="2.0139999"></ellipse>
+                        <path d="M85.167 19.398C79.725 6.692 68.979 4.666 63.072 4.666c-7.711 0-17.432 5.882-20.17 15.757 2.485.584 4.776 2.18 5.814 4.767.649-1.674 1.113-3.356 1.915-4.857 2.927-5.477 9.022-8.125 14.565-6.454 5.434 1.638 9.167 7.028 8.651 12.491-.574 6.086-5.304 10.745-11.765 11.155-4.505.286-9.259.99-10.731 6.894-2.451-3.22-3.114-5.539-3.441-7.205-8.556 4.29-16.4 7.648-22.97 14.946-4.801 5.333-8.348 11.684-10.696 18.448-1.331 3.833-1.901 7.93-2.934 12.41 25.592 2.187 43.341-8.582 56.046-29.157C62.89 70.458 48.974 78.95 34.832 84.732c.758.509 5.798 1.367 5.798 1.367s2.451 4.053 2.811 4.612c-3.083.257-3.808 3.066-3.7 3.484h8.942c-.005-.005-.01-.011-.015-.016H67c.17-.418-2.56-3.595-4.535-3.467-4.458.287-5.713-2.416-7.494-5.757 17.634967-6.026223 30.69479-23.81897 31.827834-33.333639C87.931878 42.106692 88.920505 28.578246 85.167 19.398zM48.744 90.711l-3.357-4.612 5.672-.463 3.408 5.075z"></path>
+                    </g>
+                    <text style="line-height:1.25;text-align:center" x="189.51176" y="76.53093" text-anchor="middle">
+                        <tspan x="259.51176" y="90.53093" font-weight="900" font-size="70" font-style="italic" font-family="Exo">
+                            Minerva
+                        </tspan>
+                    </text>
+                </svg>
+            </div>
+            <div id="crocs"><a href="https://crocs.fi.muni.cz" title="Visit the CRoCS website"><img
+                    src="assets/img/crocs.svg" alt="CRoCS logo"/></a></div>
+        </header>
+        <div id="content">
+            <section>
+                <p>This page describes our discovery of a group of side-channel vulnerabilities in implementations of
+                    <span class="tt">ECDSA</span>
+                    in programmable smart cards and cryptographic software libraries. Our attack allows for practical
+                    recovery of the long-term private key. We have found implementations which leak
+                    the bit-length of the scalar during scalar multiplication on an elliptic curve. This leakage might seem minuscule
+                    as the bit-length presents a very small amount of information present in the scalar. However, in the case of
+                    <span class="tt">ECDSA</span> signature generation, the leaked bit-length of the random
+                    nonce is enough for full recovery of the private key used after observing a few hundreds to a few thousands of signatures
+                    on known messages, due to the application of lattice techniques.
+                </p>
+
+                <p>We have verified our attack against
+                    an <span class="tt">Athena IDProtect</span> card, running on an <span class="tt">Inside Secure AT90SC</span> chip,
+                    for more affected devices see the <a href="#affected">next section</a>. The attack required 2100
+                    signatures to recover the private key on the standard <span class="tt">secp256r1</span> curve, using an off-the-shelf
+                    smart card reader, running on an ordinary Linux laptop with a runtime of a few minutes after the collection of
+                    signatures. The total time for the attack, including the collection of signatures was around 30 minutes.</p>
+
+                <p>We propose two new methods to recover the full private key
+                    requiring just 500 signatures for simulated leakage data, 1200 for real cryptographic
+                    library data, and 2100 for smartcard data. Our attack and proof-of-concept code is inspired by the method of <a href="#remote">Brumley &amp; Tuveri [3]</a>,
+                    for more details, see the <a href="#details">section</a> on the attack. </p>
+
+                <p>The paper, containing our improvements and systematic analysis of lattice attacks on ECDSA will appear in CHES 2020. See below for a pre-print version.</p>
+
+                <div id="paper-links" class="row mt-2 mb-2">
+                    <div class="col-sm d-flex justify-content-center mb-2">
+                        <a href="assets/Minerva.pdf" style="width: 100%" role="button" class="btn btn-primary btn-lg"><i class="fas fa-file-alt"></i> Pre-print</a>
+                    </div>
+                    <div class="col-sm d-flex justify-content-center mb-2">
+                        <a href="#" style="width: 100%" role="button" class="btn btn-primary btn-lg disabled" title="The ePrint version will be available soon."><i class="fas fa-file-alt"></i> ePrint</a>
+                    </div>
+                    <div class="col-sm d-flex justify-content-center mb-2">
+                        <a href="#" style="width: 100%" role="button" class="btn btn-primary btn-lg disabled" title="To appear at CHES 2020."><i class="fas fa-file-alt"></i> TCHES 2020</a>
+                    </div>
+                </div>
+                <div class="mt-3">
+                <p><b style="font-weight: bold">Primary contact:</b> Jan Jancar <a data-rot13="w08al@znvy.zhav.pm" class="mail-href mail-inner">ENABLE@JAVASCRIPT</a> <!--<a href="https://twitter.com/j08ny" class="badge badge-primary"><i class="fab fa-twitter"></i> j08ny</a> <a href="https://twitter.com/CRoCS_MUNI" class="badge badge-primary"><i class="fab fa-twitter"></i> CRoCS_MUNI</a>--></p>
+                <p><b class="badge badge-secondary" style="font-weight: bold">Update</b> Added a <a href="#secure-impl">list</a> of libraries and cards tested and deemed not vulnerable.</p>
+                <p><b class="badge badge-secondary" style="font-weight: bold">Update</b> This page originally claimed an attack also applicable to <span class="tt">EdDSA</span>, due to the leakage
+                    also being present in the <span class="tt">EdDSA</span> implementation in <span class="tt">libgcrypt</span>. However, an attack path for
+                    <span class="tt">EdDSA</span> is not clear, as the leakage does not represent the bit-length of the random nonce modulo the curve order,
+                    but a full SHA-512 bit hash. Without the implementation reducing this modulo the curve order (which is not required by the protocol),
+                    the leakage does not seem to be exploitable. We have thus removed <span class="tt">EdDSA</span> mentions from this page.</p>
+                </div>
+
+            </section>
+
+            <section>
+                <h3 id="affected"><a href="#affected" class="perma" title="Permanent link"><i
+                        class="fas fa-credit-card fa-fw"></i></a> Affected devices and libraries</h3>
+                <p>We have tested our attack on an <span class="tt">Athena IDProtect</span> card with <span title="ICType, OperatingSystemReleaseDate, OperatingSystemReleaseLevel">CPLC data</span> <code><span title="ICType" class="cplc">010b</span>.<span title="OperatingSystemReleaseDate" class="cplc">0352</span>.<span title="OperatingSystemReleaseLevel" class="cplc">0005</span></code>.
+                    We further believe the following devices and cryptographic libraries to be affected: </p>
+
+                <h4>Devices</h4>
+                <ul class="affected-list">
+                    <li>
+                        <span class="tt">Athena IDProtect</span> with card <span title="ICType, OperatingSystemReleaseDate, OperatingSystemReleaseLevel">CPLC data</span>:
+                        <a href="#leakage-athena-head" class="badge badge-secondary" onclick="$('#leakage-athena-body').collapse('show')" data-toggle="tooltip" data-container="html" title="Navigate to leakage plots."><i class="fas fa-chart-bar"></i> leakage plots</a> <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-15809" class="badge badge-danger" target="_blank">CVE-2019-15809</a>
+                        <ul>
+                            <li><code><span title="ICType" class="cplc">010b</span>.<span title="OperatingSystemReleaseDate" class="cplc">0352</span>.<span title="OperatingSystemReleaseLevel" class="cplc">0005</span></code>: FIPS 140-2 certificate <a
+                                    href="https://csrc.nist.gov/Projects/cryptographic-module-validation-program/Certificate/1711"
+                                    target="_blank">1711</a>, CC certificate <a href="https://www.ssi.gouv.fr/certification_cc/athena-os755idprotect-v6-sscd/" target="_blank">ANSSI-CC-2012/23</a> (tested)
+                            </li>
+                            <li><code><span title="ICType" class="cplc">010e</span>.<span title="OperatingSystemReleaseDate" class="cplc">1245</span>.<span title="OperatingSystemReleaseLevel" class="cplc">0002</span></code>: FIPS 140-2 certificate <a
+                                    href="https://csrc.nist.gov/Projects/cryptographic-module-validation-program/Certificate/1749"
+                                    target="_blank">1749</a>
+                            </li>
+                            <li><code><span title="ICType" class="cplc">0106</span>.<span title="OperatingSystemReleaseDate" class="cplc">0130</span>.<span title="OperatingSystemReleaseLevel" class="cplc">0401</span></code>: FIPS 140-2 certificate <a
+                                    href="https://csrc.nist.gov/Projects/cryptographic-module-validation-program/Certificate/1750"
+                                    target="_blank">1750</a>
+                            </li>
+                            <li><code><span title="ICType" class="cplc">010e</span>.<span title="OperatingSystemReleaseDate" class="cplc">1245</span>.<span title="OperatingSystemReleaseLevel" class="cplc">0002</span></code>: FIPS 140-2 certificate <a
+                                    href="https://csrc.nist.gov/Projects/cryptographic-module-validation-program/Certificate/1764"
+                                    target="_blank">1764</a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+                <h4>Likely affected devices</h4>
+                <ul class="affected-list">
+                    <li><span class="tt">Valid S/A IDflex V</span> with card <span title="ICType, OperatingSystemReleaseDate, OperatingSystemReleaseLevel">CPLC data</span>:
+                        <ul>
+                            <li><code><span title="ICType" class="cplc">010b</span>.<span title="OperatingSystemReleaseDate" class="cplc">0352</span>.<span title="OperatingSystemReleaseLevel" class="cplc">0005</span></code>: FIPS 140-2 certificate <a
+                                    href="https://csrc.nist.gov/Projects/Cryptographic-Module-Validation-Program/Certificate/1781"
+                                    target="_blank">1781</a> (assumed, not tested)
+                            </li>
+                        </ul>
+                    </li>
+                    <li><span class="tt">SafeNet eToken 4300</span> with card <span title="ICType, OperatingSystemReleaseDate, OperatingSystemReleaseLevel">CPLC data</span>:
+                        <ul>
+                            <li><code><span title="ICType" class="cplc">010e</span>.<span title="OperatingSystemReleaseDate" class="cplc">1245</span>.<span title="OperatingSystemReleaseLevel" class="cplc">0002</span></code>: FIPS 140-2 certificate <a
+                                    href="https://csrc.nist.gov/Projects/Cryptographic-Module-Validation-Program/Certificate/1800"
+                                    target="_blank">1800</a> (assumed, not tested)
+                            </li>
+                        </ul>
+                    </li>
+                    <li><span class="tt">TecSec Armored Card</span> with card <span title="ICType, OperatingSystemReleaseDate, OperatingSystemReleaseLevel">CPLC data</span>:
+                        <ul>
+                            <li><code><span title="ICType" class="cplc">010e</span>.<span title="OperatingSystemReleaseDate" class="cplc">0264</span>.<span title="OperatingSystemReleaseLevel" class="cplc">0001</span></code>: FIPS 140-2 certificate <a
+                                    href="https://csrc.nist.gov/Projects/Cryptographic-Module-Validation-Program/Certificate/1986"
+                                    target="_blank">1986</a> (assumed, not tested)
+                            </li>
+                            <li><code><span title="ICType" class="cplc">0108</span>.<span title="OperatingSystemReleaseDate" class="cplc">0264</span>.<span title="OperatingSystemReleaseLevel" class="cplc">0001</span></code>: FIPS 140-2 certificate <a
+                                    href="https://csrc.nist.gov/Projects/Cryptographic-Module-Validation-Program/Certificate/1992"
+                                    target="_blank">1992</a> (assumed, not tested)
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+                <h4>Libraries</h4>
+                    <ul class="affected-list">
+                    <li><span class="tt">libgcrypt</span>:
+                        <a href="#leakage-gcrypt-head" class="badge badge-secondary" onclick="$('#leakage-gcrypt-body').collapse('show')" data-toggle="tooltip" data-container="html" title="Navigate to leakage plots."><i class="fas fa-chart-bar"></i> leakage
+                            plots</a> <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-13627" class="badge badge-danger" target="_blank">CVE-2019-13627</a> <a href="https://git.gnupg.org/cgi-bin/gitweb.cgi?p=libgcrypt.git;a=blob;f=mpi/ec.c;h=89077cd94b4647a2a432f117c28d848f114fd68d;hb=refs/tags/libgcrypt-1.8.4#l1312" class="badge badge-primary" target="_blank">source</a> <a href="https://git.gnupg.org/cgi-bin/gitweb.cgi?p=libgcrypt.git;a=commit;h=b9577f7c89b4327edc09f2231bc8b31521102c79" class="badge badge-success" target="_blank">fix</a>
+                        <ul>
+                            <li><span class="tt">ECDSA</span>: all versions including 1.8.4, introduced in 1.3.0, fixed in 1.8.5</li>
+                            <li><del><span class="tt">EdDSA</span>: all versions including 1.8.4, introduced in 1.6.0, fixed in 1.8.5</del><br/>
+                            	<b style="font-weight: bold">Update</b>: The <span class="tt">EdDSA</span> scalar multiplication code in <span class="tt">libgcrypt</span> was leaking, however due to the way it was used, it was likely not exploitable.
+                            	It did not reduce the scalar which was a SHA512 digest by the curve order, but used the digest directly, thus the leakage did not represent the bit-length of the reduced scalar.
+                            	Thanks to Daniel J. Bernstein for the note.
+                            </li>
+                        </ul>
+                    </li>
+                        <li><span class="tt">wolfSSL</span>/<span class="tt">wolfCrypt</span>:
+                            <a href="#leakage-wolfcrypt-head" class="badge badge-secondary"
+                               onclick="$('#leakage-wolfcrypt-body').collapse('show')" data-toggle="tooltip" data-container="html" title="Navigate to leakage plots."><i class="fas fa-chart-bar"></i> leakage plots</a> <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-13628" class="badge badge-danger" target="_blank">CVE-2019-13628</a> <a href="https://github.com/wolfSSL/wolfssl/blob/21f2beca9f320199fcea4a96df3e19967804144b/wolfcrypt/src/ecc.c#L2774" class="badge badge-primary" target="_blank">source</a> <a href="https://github.com/wolfSSL/wolfssl/pull/2353" class="badge badge-success" target="_blank">fix</a>
+                            <ul>
+                                <li><span class="tt">ECDSA</span>: all versions including 4.0.0, fixed in 4.1.0<br/>
+                                The leakage in <span class="tt">wolfSSL</span>/<span class="tt">wolfCrypt</span> is minuscule and would be very hard to exploit.
+                                </li>
+                            </ul>
+                        </li>
+                    <li><span class="tt">MatrixSSL</span>:
+                        <a href="#leakage-matrixssl-head" class="badge badge-secondary"
+                           onclick="$('#leakage-matrixssl-body').collapse('show')" data-toggle="tooltip" data-container="html" title="Navigate to leakage plots."><i class="fas fa-chart-bar"></i> leakage plots</a> <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-13629" class="badge badge-danger" target="_blank">CVE-2019-13629</a> <a href="https://github.com/matrixssl/matrixssl/blob/91fd0f130294629fe6f17078c5306af42ca6cfa5/crypto/pubkey/ecc_math.c#L209" class="badge badge-primary" target="_blank">source</a> <span class="badge badge-warning" data-toggle="tooltip" data-container="html" title="MatrixSSL did not respond to any of our vulnerability reports and provided no fixes.">no fix</span>
+                        <ul>
+                            <li><span class="tt">ECDSA</span>: all versions including 4.2.1</li>
+                        </ul>
+                    </li>
+                    <li><span class="tt">SunEC</span>/<span class="tt">OpenJDK</span>/<span class="tt">Oracle JDK</span>:
+                        <a href="#leakage-sunec-head" class="badge badge-secondary" onclick="$('#leakage-sunec-body').collapse('show')" data-toggle="tooltip" data-container="html" title="Navigate to leakage plots."><i class="fas fa-chart-bar"></i> leakage
+                            plots</a> <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-2894" class="badge badge-danger" target="_blank">CVE-2019-2894</a> <a href="http://hg.openjdk.java.net/jdk/jdk13/file/31b7274c7b9e/src/jdk.crypto.ec/share/native/libsunec/impl/ec2_mont.c#l225" class="badge badge-primary" target="_blank">source</a> <span class="badge badge-warning" data-toggle="tooltip" data-container="html" title="Oracle did not release any fixes yet, even though we have provided them with a working patch on the 14th of August.">no fix</span> <a href="assets/jdk.patch" class="badge badge-success">our patch</a>
+
+                        <ul>
+                            <li><span class="tt">ECDSA</span> over binary field curves: all versions including JDK 12, introduced in JDK 7<br/>
+                            </li>
+                        </ul>
+                    </li>
+                    <li><span class="tt">Crypto++</span>:
+                        <a href="#leakage-cryptopp-head" class="badge badge-secondary" onclick="$('#leakage-cryptopp-body').collapse('show')" data-toggle="tooltip" data-container="html" title="Navigate to leakage plots."><i class="fas fa-chart-bar"></i> leakage
+                            plots</a> <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-14318" class="badge badge-danger" target="_blank">CVE-2019-14318</a> <a href="https://github.com/weidai11/cryptopp/commit/f68f00f5601f6e4aade302e92cb1a7f8e85c250f" class="badge badge-success" target="_blank">fix</a>
+                        <ul>
+                            <li><span class="tt">ECDSA</span> over binary field curves: all versions including 8.2.0<br/>
+                            </li>
+                            <li><span class="tt">ECDSA</span> over prime field curves: all versions including 8.2.0, significantly smaller leakage.<br/>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+                <h4>Other software</h4>
+                <ul>
+                    <li><span class="tt">jsrsasign</span>: <a href="https://github.com/kjur/jsrsasign" target="_blank" class="badge badge-primary"><i class="fab fa-github"></i> source</a> <a href="https://github.com/kjur/jsrsasign/commit/9dcb89c57408a3d4b5b66aa9138426bd92819e73" class="badge badge-success" target="_blank">fix</a> 2015 stars, 7406 uses</li>
+                    <li><span class="tt">elliptic</span>: <a href="https://github.com/indutny/elliptic/" target="_blank" class="badge badge-primary"><i class="fab fa-github"></i> source</a> 875 stars, 2 670 640 uses</li>
+                    <li><span class="tt">python-ecdsa</span>: <a href="https://github.com/warner/python-ecdsa" target="_blank" class="badge badge-primary"><i class="fab fa-github"></i> source</a> 497 stars</li>
+                    <li><span class="tt">easy-ecc</span>: <a href="https://github.com/esxgx/easy-ecc/" target="_blank" class="badge badge-primary"><i class="fab fa-github"></i> source</a> 122 stars</li>
+                    <li><span class="tt">fastecdsa</span>: <a href="https://github.com/AntonKueltz/fastecdsa" target="_blank" class="badge badge-primary"><i class="fab fa-github"></i> source</a> 100 stars</li>
+                    <li><span class="tt">ruby_ecdsa</span>: <a href="https://github.com/DavidEGrayson/ruby_ecdsa" target="_blank" class="badge badge-primary"><i class="fab fa-github"></i> source</a> 78 stars</li>
+                </ul>
+
+                <p>We believe all of the cards above are affected because they share a common <span class="tt">ECDSA</span> component (FIPS
+                    module
+                    <a href="https://csrc.nist.gov/Projects/Cryptographic-Algorithm-Validation-Program/details?source=ECDSA&amp;number=214"
+                       target="_blank">214</a>)
+                    , which is described as <span class="tt">Athena OS755 ECDSA2 Component</span> on
+                    <span class="tt">Inside Secure AT90SC A1.0 (Firmware)</span>. We have tested the vulnerability only on the <span class="tt">Athena IDProtect</span> card with CPLC data
+                    <code><span title="ICType" class="cplc">010b</span>.<span title="OperatingSystemReleaseDate" class="cplc">0352</span>.<span title="OperatingSystemReleaseLevel" class="cplc">0005</span></code> and ATR 
+                    <code>3bd518ff8191fe1fc38073c8211309</code>.</p>
+
+                <p>We believe that the source of the vulnerability of the aforementioned cards utilizing the Athena ECDSA component is
+                    the <span class="tt">Atmel Toolbox 00.03.11.05</span> with the Common Criteria certificate <span class="tt">DCSSI-CC-2009/11</span>
+                    (<a href="https://commoncriteriaportal.org/files/epfiles/dcssi-cible2009_11en.pdf" target="_blank">security target</a>,
+                    <a href="https://commoncriteriaportal.org/files/epfiles/dcssi-2009_11fr.pdf" target="_blank">certification report</a>, <a href="https://www.ssi.gouv.fr/certification_cc/bibliotheque-cryptographique-atmel-toolbox-00-03-11-05/" target="_blank">info page</a>).
+                    The security target states the following under security functions (on pages 48 and 49):</p>
+
+<pre class="listing" id="out-of-scope">
+- M10.6 the TSF shall provide digital signature confirming to EC-DSA standard.
+    - Secure digital signature generate
+    - Secure digital signature verify
+    - Fast digital signature generate <span style="font-weight: bold;">(see note*)</span>
+    - Fast digital signature verify <span style="font-weight: bold;">(see note*)</span>
+
+- M10.7 the TSF shall provide point multiplication on an elliptical curve, conforming to EC-DSA standard.
+    - Secure multiply
+    - Fast multiply <span style="font-weight: bold;">(see note*)</span>
+
+    <span style="font-weight: bold;">*</span> The <span style="font-weight: bold;">Fast</span> functions of M10.3, M10.4, M10.5, M10.7, M10.8, M10.9, do not
+    offer any DPA/SPA protection and <span style="font-weight: bold;">must not</span> be used for secure data.</pre>
+                <p>We assume that the vulnerable Athena cards used the fast and insecure functions. Our hypothesis was confirmed to us after discussions
+                with the vendor, see more in the <a href="#disclosure">responsible disclosure</a> section.</p>
+
+            </section>
+
+            <section>
+            <h3 id="secure-impl"><a href="#secure-impl" class="perma" title="Permanent link"><i class="fas fa-check-square fa-fw"></i></a> Tested implementations deemed secure</h3>
+            <p>Most implementations we analyzed during this research did not show any leakage and are thus likely secure.
+                We cannot be sure of this, as our tests might not be exhaustive due to the complexity of the implementations.</p>
+                <p>The libraries usually have multiple scalar multiplication algorithms and choose from them based on build options, runtime configuration,
+            curve used, cryptosystem used and operation being performed. Thus, our testing might just not have caught a particular configuration that could still
+            be vulnerable. Below, we list libraries we tested and found not vulnerable:</p>
+                <h4>Libraries</h4>
+            <ul class="affected-list">
+                <li><span class="tt">OpenSSL 1.1.1d</span></li>
+                <li><span class="tt">BouncyCastle 1.58</span></li>
+                <li><span class="tt">BoringSSL 974f4dddf</span></li>
+                <li><span class="tt">libtomcrypt 1.18.2</span></li>
+                <li><span class="tt">Botan 2.11.0</span></li>
+                <li><span class="tt">Microsoft CNG</span></li>
+                <li><span class="tt">mbedTLS 2.16.0</span></li>
+                <li><span class="tt">Intel IPP-Crypto</span></li>
+                <li><span class="tt">IAIK ECCelerate 6.0.1</span></li>
+            </ul>
+                <h4>Cards</h4>
+                <ul class="affected-list">
+                <li><span class="tt">ACS ACOSJ 40K</span></li>
+                <li><span class="tt">Feitian A22CR</span></li>
+                <li><span class="tt">G&D SmartCafe 6.0</span></li>
+                <li><span class="tt">G&D SmartCafe 7.0</span></li>
+                <li><span class="tt">Infineon CJTOP 80K INF SLJ 52GLA080AL M8.4</span></li>
+                <li><span class="tt">Infineon SLE78 Universal JCard</span></li>
+                <li><span class="tt">NXP JCOP31 v2.4.1</span></li>
+                <li><span class="tt">NXP JCOP CJ2A081</span></li>
+                <li><span class="tt">NXP JCOP v2.4.2 R2</span></li>
+                <li><span class="tt">NXP JCOP v2.4.2 R3</span></li>
+                <li><span class="tt">TaiSYS SIMoME VAULT</span></li>
+            </ul>
+            	<h4>Devices</h4>
+            	<ul class="affected-list">
+            	<li><span class="tt">YubiKey HSM 2 v2.102</span><sup>*</sup></li>
+          	</ul>
+          		<p><sup>*</sup> Thanks to John Hughes for testing.</p>
+                <p>See the ECTester <a href="https://github.com/crocs-muni/ECTester/blob/master/docs/LIBS.md">documentation</a> for more information about tested libraries.</p>
+            </section>
+
+            <section>
+                <h3 id="qa"><a href="#qa" class="perma" title="Permanent link"><i class="fas fa-question fa-fw"></i></a>
+                    Questions & Answers</h3>
+                <ul id="qa-list">
+                    <li><b class="qhead">Is my device affected?</b><br/>
+                        See the section on <a href="#affected">affected devices</a>,
+                        also if you have access to an unlocked JavaCard, you can test its
+                        vulnerability using our <a href="#poc">proof-of-concept</a> and other testing tools.
+                        If you found a device or a library that is affected but is not present in the list above,
+                        please <a data-rot13="w08al@znvy.zhav.pm" class="mail-href">contact us</a>.<br/>
+                    </li>
+                    <li><b class="qhead">Is my library affected?</b><br/>
+                        See the section on <a href="#affected">affected devices</a>,
+                        if it is not there and it is supported by the
+                        <a href="https://crocs-muni.github.io/ECTester/" target="_blank"><i
+                                class="fas fa-credit-card"></i> ECTester</a> tool
+                        then it is probably not affected, as we tested it (<a
+                                href="https://github.com/crocs-muni/ECTester/blob/master/docs/LIBS.md" target="_blank">list
+                            of supported libraries</a>). If it is not supported, we did not check.
+                        Furthermore, even if it is listed and we have tested it, it still may be vulnerable as
+                        cryptographic libraries often
+                        contain more than one scalar multiplication algorithm implementation, which can be enabled
+                        either by build options or
+                        sometimes even at runtime, where different algorithms are used for different classes of curves.
+                        We have usually tested the libraries
+                        in only one configuration and on a few curves (<span class="tt">secp256r1</span>, <span class="tt">sect233r1</span>...).
+                    </li>
+                    <li><b class="qhead">Are other devices running on the AT90SC chip affected?</b><br/>
+                        The AT90SC chip was sold along with the <span class="tt">Atmel Toolbox</span>, a cryptographic toolbox
+                        utilizing the functionality of the Ad-X cryptographic coprocessor to provide some higher/level cryptographic
+                        functionality, such as <span class="tt">ECDSA</span> or <span class="tt">RSA</span>. This toolbox evolved, as the underlying intellectual property was
+                        sold from Atmel to Inside Secure (now called Verimatrix) and finally to WiseKey. The vulnerability is
+                        known to be present in one concrete version of the toolbox, the
+                        <span class="tt">Atmel Toolbox 00.03.11.05 on the AT90SC Family of Devices</span>, as specified in the
+                        Common Criteria <a href="https://commoncriteriaportal.org/files/epfiles/dcssi-cible2009_11en.pdf" target="_blank">security target</a> of the toolbox.
+                        This version of the toolbox contains two versions of <span class="tt">ECDSA</span> functionality, secure and fast, the device
+                        using the toolbox is affected if it uses the fast version of the primitive, as the above-specified cards do.
+                        We do not know if other versions of this toolbox, and the renamed <span class="tt">INSIDE Toolbox</span> or
+                        <span class="tt">WiseKey Toolbox</span> contain the insecure functionality or if they are vulnerable.
+                    </li>
+                    <li><b class="qhead">Why did the Atmel Toolbox contain explicitly insecure functionality?</b><br/>
+                        We have no idea. Having functions that perform signing or encryption, but are explicitly marked as insecure is possibly faster but also pointless and dangerous as can be seen from the resulting vulnerabilities.
+                    </li>
+                    <li><b class="qhead">Is there a proof of concept?</b><br/>
+                        Yes, see the <a href="#poc">next section</a>.
+                    </li>
+
+                    <li><b class="qhead">Are there any CVEs for Minerva?</b><br/>
+                        Yes, the following:
+                        <ul>
+                            <li><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-15809" target="_blank">CVE-2019-15809</a>:
+                                Vulnerability in Athena-based cards.</li>
+                            <li><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-13627" target="_blank">CVE-2019-13627</a>:
+                                Vulnerability in <span class="tt">libgcrypt</span>.
+                            </li>
+                            <li><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-13628" target="_blank">CVE-2019-13628</a>:
+                                Vulnerability in <span class="tt">wolfSSL</span>/<span class="tt">wolfCrypt</span>.
+                            </li>
+                            <li><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-13629" target="_blank">CVE-2019-13629</a>:
+                                Vulnerability in <span class="tt">MatrixSSL</span>.
+                            </li>
+                            <li><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-2894" target="_blank">CVE-2019-2894</a>:
+								Vulnerability in <span class="tt">SunEC</span>/<span class="tt">OpenJDK</span>/<span class="tt">Oracle JDK</span>.
+                            </li>
+                            <li><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-14318" target="_blank">CVE-2019-14318</a>:
+                            	Vulnerability in <span class="tt">Crypto++</span>.
+                        </ul>
+                    </li>
+                    <li><b class="qhead">What is required to perform the attack?</b><br/>
+                        The attacker needs to be able to measure the duration of hundreds to thousands of signing operations
+                        of known messages. The less noise in the measurement is present, the less signatures the attacker needs.
+                        The computation of the private key is then a matter of seconds or minutes.
+                    </li>
+                    <li><b class="qhead">Is this exploitable locally?</b><br/>
+                        Definitely, if the runtime of signing operations performed by an affected device or library is measurable,
+                        locally the amount of noise is not enough to stop the attack. We have verified this against the affected libraries,
+                        and the code to do so is present in the <a href="#poc">PoC</a>.
+                    </li>
+                    <li><b class="qhead">Is this exploitable remotely?</b><br/>
+                        <p>Maybe, <a href="#remote">Brumley & Tuveri [3]</a> demonstrate the attack using the loopback interface of the same machine
+                        and even between two machines sharing the same network switch. We think this could be extended by collection of a larger amount
+                        of signatures and an increase in computation time.</p>
+                        <p>Furthermore, the <a href="#tpm-fail">TPM-Fail [14]</a> paper demonstrates the attack using two machines sharing the same network switch.
+                        We do not consider this really remote though, as the noise introduced by such a switch can be even smaller than noise naturally present in
+                        a leaking but noisy implementation, such as a smartcard.</p>
+                    </li>
+                    <li><b class="qhead">I own a vulnerable device, can I fix it?</b><br/>
+                        Probably not, the vulnerability is present in the underlying firmware, which is
+                        inaccessible to the user/administrator of the device. However, the firmware might be updateable by the
+                        manufacturer. In the case of a vulnerable library, updating it to the newest version should fix it, as most libraries we notified
+                        fixed the issue and released a new version.
+                    </li>
+                    <li><b class="qhead">How did this happen? The devices are certified.</b><br/>
+                        <p>The FIPS 140-2 certification scheme specifically does not require side-channel resistance to be tested by
+                            the lab performing the assessment (see <a href="#fips">[12]</a> page 12 on <i>Mitigation of other attacks</i>). So even though the FIPS security targets of the aforementioned cards specify
+                        resistance against side-channel attacks, no such testing had to be performed. The case of Common Criteria certificate
+                        <a href="https://www.ssi.gouv.fr/certification_cc/athena-os755idprotect-v6-sscd/" target="_blank">ANSSI-CC-2012/23</a> can be answered
+                            easily as well, the <span class="tt">ECDSA</span> functionality of the card is explicitly mentioned to be out of the security requirements.
+                        The original Common Criteria certificate <span class="tt">DCSSI-CC-2009/11</span> that introduced the vulnerable functionality did so by
+                        stating the functionality is explicitly not protected against SPA/DPA attacks and should not be used on secure data.</p>
+                        <p>As for the libraries, preventing leakage of the bit-length is surprisingly hard as we analyzed in the section on <a href="#details-reasons">root causes</a>.</p>
+                    </li>
+                    <li><b class="qhead">Why is it called Minerva?</b><br/>
+                        We discovered this vulnerability on cards from the Athena SCS manufacturer,
+                        which was named after the greek goddess
+                        <a href="https://en.wikipedia.org/wiki/Athena" title="Wikipedia:Athena"
+                           target="_blank">Athena</a>.
+                        <a href="https://en.wikipedia.org/wiki/Minerva" title="Wikipedia:Minerva" target="_blank">Minerva</a>
+                        is the Roman equivalent.
+                    </li>
+                    <li><b class="qhead">Why the logo?</b><br/>
+                        Why not? An owl was one of the main symbols of the Roman goddess Minerva. You can download it
+                        <a href="assets/img/logo.svg">here</a> in svg (or <a href="assets/img/logo.png">here</a> in png), it is <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY 4.0</a> licensed.
+                    </li>
+                </ul>
+            </section>
+
+            <section>
+                <h3 id="poc"><a href="#poc" class="perma" title="Permanent link"><i class="fas fa-code fa-fw"></i></a> Proof of Concept</h3>
+                The tools can be downloaded from:
+                <table id="poc-download">
+                    <thead>
+                    <tr>
+                        <td>Content</td>
+                        <td>zip</td>
+                        <td>signature</td>
+                        <td>tar.gz</td>
+                        <td>signature</td>
+                    </tr>
+                    </thead>
+                    <tr>
+                        <td>Proof-of-Concept</td>
+                        <td><a href="assets/poc.zip" title="poc.zip"><i class="fas fa-file-archive"></i> <span class="filename">poc.zip</span></a></td>
+                        <td><a href="assets/poc.zip.asc" title="poc.zip.asc"><i class="fas fa-file-signature"></i> <span class="filename">sig</span></a></td>
+                        <td><a href="assets/poc.tar.gz" title="poc.tar.gz"><i class="fas fa-box-open"></i> <span class="filename">poc.tar.gz</span></a></td>
+                        <td><a href="assets/poc.tar.gz.asc" title="poc.tar.gz.asc"><i class="fas fa-file-signature"></i> <span class="filename">sig</span></a></td>
+                    </tr>
+                    <tr>
+                        <td>CPLC checker</td>
+                        <td><a href="assets/cplc.zip" title="cplc.zip"><i class="fas fa-file-archive"></i> <span class="filename">cplc.zip</span></a></td>
+                        <td><a href="assets/cplc.zip.asc" title="cplc.zip.asc"><i class="fas fa-file-signature"></i> <span class="filename">sig</span></a></td>
+                        <td><a href="assets/cplc.tar.gz" title="cplc.tar.gz"><i class="fas fa-box-open"></i> <span class="filename">cplc.tar.gz</span></a></td>
+                        <td><a href="assets/cplc.tar.gz.asc" title="cplc.tar.gz.asc"><i class="fas fa-file-signature"></i> <span class="filename">sig</span></a></td>
+                    </tr>
+                    <tr>
+                        <td>ECDH tester</td>
+                        <td><a href="assets/tester.zip" title="tester.zip"><i class="fas fa-file-archive"></i> <span class="filename">tester.zip</span></a></td>
+                        <td><a href="assets/tester.zip.asc" title="tester.zip.asc"><i class="fas fa-file-signature"></i> <span class="filename">sig</span></a></td>
+                        <td><a href="assets/tester.tar.gz" title="tester.tar.gz"><i class="fas fa-box-open"></i> <span class="filename">tester.tar.gz</span></a></td>
+                        <td><a href="assets/tester.tar.gz.asc" title="tester.tar.gz.asc"><i class="fas fa-file-signature"></i> <span class="filename">sig</span></a></td>
+                    </tr>
+                    <tr>
+                        <td>All of the above</td>
+                        <td><a href="assets/all.zip"><i class="fas fa-file-archive"></i> <span class="filename">all.zip</span></a></td>
+                        <td><a href="assets/all.zip.asc"><i class="fas fa-file-signature"></i> <span class="filename">sig</span></a></td>
+                        <td><a href="assets/all.tar.gz"><i class="fas fa-box-open"></i> <span class="filename">all.tar.gz</span></a></td>
+                        <td><a href="assets/all.tar.gz.asc"><i class="fas fa-file-signature"></i> <span class="filename">sig</span></a></td>
+                    </tr>
+                </table>
+                The above archives were signed by the <a href="https://neuromancer.sk/static/johny.asc">PGP key</a> of Jan Jancar, one of the discoverers.
+
+                <h4>Proof-of-Concept</h4>
+
+                <p>The Minerva proof-of-concept contains code that exploits the vulnerability against a JavaCard
+                    with a target applet, or against targets using several vulnerable libraries.</p>
+
+                <h5>Contents</h5>
+
+                <p><code>applet/</code> contains code of the target JavaCard applet. It generates an ECC keypair on the
+                    <code>secp256r1</code> curve in the <code>PREPARE</code> command and exports the public key in the response as well as the data
+                    that will be signed. Then, in the <code>SIGN</code> command it signs the data using ECDSA with SHA256 and responds
+                    with the signature. See <code>build.xml</code> for the ant build script.</p>
+
+                <p><code>attack/</code> contains two attack scripts. An online one against a JavaCard target in <code>poc.py</code> and
+                    an offline one in <code>attack.py</code>. Both are written in Python 3 and use the
+                    <code>pyscard</code> library for communication and <code>fpylll</code> library for lattice reduction
+                    and CVP solving required for the attack. Both take parameters in the form of a JSON
+                    file, which specified what kind of attack is to be performed, see the description in <code>attack.py</code>.
+                    The offline attack takes as input a csv file produced by one of the targets or the collection
+                    script in <code>collect/</code> for the target JavaCard applet.</p>
+
+                <p><code>build/</code> is a directory created by the ant build which contains the CAP file with the
+                    built JavaCard applet.</p>
+
+                <p><code>collect/</code> contains a Python script which collects signatures from the target JavaCard applet
+                    and outputs it in a format ready for the offline attack script <code>attack/attack.py</code>.</p>
+
+                <p><code>ext/</code> contains some third party content, such as the ant-javacard extension
+                    (<code>ant-javacard.jar</code>) for the ant build system, which is used to build the
+                    applet as well as a version of the JavaCard SDK 2.2.2 (<code>jckit_222</code>).</p>
+
+                <p><code>target/</code> contains target apps which perform ECDSA signatures using the vulnerable libraries
+                    and export the signatures with timing information in format ready for the offline attack script
+                    <code>attack/attack.py</code>. See the Makefile for information on building.</p>
+
+                <h5>Usage with JavaCard</h5>
+
+                <ol>
+                    <li>Build the applet via <kbd>ant build</kbd>.</li>
+                    <li>Install the applet (<code>build/applet.cap</code>) on the card. For example
+                        using <a href="https://github.com/martinpaljak/GlobalPlatformPro" target="_blank">GlobalPlatformPro</a>, so
+                        doing <kbd>gp --install build/applet.cap</kbd>.</li>
+                    <li>Install Python packages from <code>requirements.txt</code> (into a virtualenv).
+                        Starting with <kbd>pip install Cython</kbd> first, as it is a build dependency of
+                        <code>fpylll</code>. <code>fpylll</code> has a somewhat more involved install process, see
+                        <a href="https://github.com/fplll/fpylll" target="_blank">https://github.com/fplll/fpylll</a>,
+                        you will need the current master version of <code>fpylll</code>.</li>
+                    <li>Run <kbd>./attack/poc.py</kbd>. If a USB reader is used, not using other
+                        USB devices during the attack makes it more reliable. Also, not using the machine
+                        for other computations during the attack limits the noise and makes it more reliable.</li>
+                    <li>Observe a new keypair being generated (the public key is exported from
+                        the card and printed) and the attack starting. Observe the reconstructed
+                        private key after around 10k-25k signatures. If the attack did not succeed
+                        after this time, it is likely that that particular run of the attack will
+                        not succeed at all, likely due to noise during the timing measurement.</li>
+                </ol>
+
+                <h5>Usage with libraries</h5>
+
+                <ol>
+                    <li>Build the particular target app using the Makefile in the <code>target/</code> directory.</li>
+                    <li>Run the target, possibly with <a href="https://wiki.archlinux.org/index.php/CPU_frequency_scaling" target="_blank" title="CPU frequency scaling">frequency scaling</a> off,
+                        passing the arguments: the chosen curve, hash algorithm and amount of signatures requested. Save the
+                        output to a file.</li>
+                    <li>Install Python packages from <code>requirements.txt</code> (into a virtualenv).
+                        Starting with <kbd>pip install Cython</kbd> first, as it is a build dependency of
+                        <code>fpylll</code>. <code>fpylll</code> has a somewhat more involved install process, see
+                        <a href="https://github.com/fplll/fpylll" target="_blank">https://github.com/fplll/fpylll</a>,
+                        you will need the current master version of <code>fpylll</code>.</li>
+                    <li>Run <kbd>./attack/attack.py</kbd>, again passing the arguments: chosen curve, hash algorithm and filename
+                        containing the signatures from the target. Observe the reconstructed private key.</li>
+                </ol>
+
+                <h4>CPLC checker</h4>
+                <p>The Minerva CPLC checker uses the Card Production Life Cycle (CPLC) data present on
+                    cards under the GlobalPlatform standard to identify vulnerable cards based on a list of
+                    known or suspected vulnerable devices.</p>
+
+                <p>To run this tool, install the Python requirements from the <code>requirements.txt</code> file,
+                    then simply insert the tested card into your reader and run the <kbd>./check.py</kbd> script.</p>
+
+                <h4>ECDH tester</h4>
+                <p>The Minerva tester is a testing tool for JavaCards which uses <span class="tt">ECDH</span> to assess the presence
+                    of timing leakage of bit-length in scalar-multiplication. Since it has to use <span class="tt">ECDH</span> to control
+                    the scalar (the <span class="tt">ECDSA</span> API in JavaCard does not allow to choose the random nonce = the scalar) the presence
+                    of leakage in <span class="tt">ECDH</span> cannot be used to prove the presence of leakage in <span class="tt">ECDSA</span>, as the two might
+                    be implemented differently and have different side-channel protections. We have observed both
+                    cards which leaked in <span class="tt">ECDH</span> but not in <span class="tt">ECDSA</span> and those that leaked in <span class="tt">ECDH</span> and <span class="tt">ECDSA</span>.</p>
+
+                <h5>Contents</h5>
+
+                <p><code>applet/</code> contains code of a target applet. The applet creates an ECC keypair and sets the <code>secp256r1</code>
+                    curve parameters. In the <code>PREPARE</code> command, the applet prepares a private key for ECDH, with bit-length
+                    set in the command, the private key simply has the form <code>1 << (bit_length - 1)</code>. In the <code>KEX</code> command
+                    the applet performs ECDH with the prepared private key. See <code>build.xml</code> for the ant build script.</p>
+
+                <p><code>build/</code> is a directory created by the ant build which contains the CAP file with the
+                    built JavaCard applet.</p>
+
+                <p><code>reader/</code> contains code of the tester. It is written in Python 3 and uses the
+                    <code>pyscard</code> library for communication.</p>
+
+                <p><code>ext/</code> contains some third party content, such as the ant-javacard extension
+                    (<code>ant-javacard.jar</code>) for the ant build system, which is used to build the
+                    applet as well as a version of the JavaCard SDK 2.2.2 (<code>jckit_222</code>).</p>
+
+                <h5>Usage</h5>
+
+                <ol>
+                    <li>Build the applet via <kbd>ant build</kbd>.</li>
+                    <li>Install the applet (<code>build/applet.cap</code>) on the card. For example
+                        using <a href="https://github.com/martinpaljak/GlobalPlatformPro" target="_blank">GlobalPlatformPro</a>, so
+                        doing <kbd>gp --install build/applet.cap</kbd>.</li>
+                    <li>Install Python packages from <code>requirements.txt</code> (into a virtualenv).</li>
+                    <li>Run <kbd>./reader/test.py</kbd>.</li>
+                    <li>Observe ECDH being performed, with private keys of varying bit-length, after
+                        all of the measurements are done a plot will display, showing the dependency
+                        of ECDH duration on bit-length (if any), and the correlation of the two. This
+                        dependency cannot be directly connected to ECDSA, since a different algorithm
+                        might be used for scalar multiplication there (as we observed with one card), but
+                        can be taken as guidance that if ECDH leaks, ECDSA might as well (as is the case with
+                        another card).</li>
+                </ol>
+
+            </section>
+
+            <section>
+                <h3 id="details"><a href="#details" class="perma" title="Permanent link"><i
+                        class="fas fa-bug fa-fw"></i></a> Technical details</h3>
+                <p>Our attack is a lattice attack on the timing leakage of the bit-length of nonces used in <span class="tt">ECDSA</span> and other
+                    similar signature algorithms, as presented in <a href="#remote">[3]</a>, with minor adaptations. The vulnerable devices and libraries trivially leak the bit-length of the
+                    scalar used in scalar multiplication in <span class="tt">ECDH</span>, <span class="tt">ECDSA</span> and key generation (see the <a href="#details-leakage">next subsection</a>).
+                    The leakage is insignificant for <span class="tt">ECDH</span> and key generation as only the bit-length of the private key
+                    is leaked, which represents a small amount of always the same information about the private key.
+                </p>
+                <p>However, in the case of <span class="tt">ECDSA</span> or other signature schemes with random nonces, the bit-length of the random nonces is leaked. This is
+                    much more significant as each signature then presents new usable information on the private key. The way this information
+                    is used to recover the private key is via first converting the problem to an instance of the Hidden Number Problem, which we describe in <a href="#details-hnp">a section</a> and
+                    solving it via lattice reduction techniques.</p>
+
+                <h4 id="details-leakage">Leakage</h4>
+                <p>The following images were generated using our tool <a href="https://crocs-muni.github.io/ECTester/" target="_blank"><i class="fas fa-credit-card"></i> ECTester</a>.</p>
+                <p>The images contain heatmaps demonstrating the dependency of signing duration and nonce bit-length, or in general, the dependency of
+                the duration of scalar multiplication on certain bits of the scalar. The example group of images shown first shows a well-behaving implementation
+                with no leakage.</p>
+
+                <p>For three out of five affected libraries (<span class="tt">libgcrypt</span>, <span class="tt">MatrixSSL</span>, <span class="tt">SunEC</span>) and
+                    the affected smartcard (<span class="tt">Athena IDProtect</span>), the signing runtime directly depends on the bit-length
+                    of the nonce linearly: each additional bit represents one more iteration of a loop in
+                    scalar multiplication, which increases the runtime. The leakage can be clearly seen from
+                    powertraces of the card performing <span class="tt">ECDSA</span> signing in Figure <a href="#athena-fig6" class="figure-link">a6</a>.</p>
+
+                <p>For implementations leaking just the noisy bit-length (<span class="tt">libgcrypt</span>, <span class="tt">SunEC</span>, <span class="tt">Athena IDProtect</span>) the
+                    leakage can be modeled using three parameters: duration of constant time processing in
+                    signing (e.g., hashing) (\(base\)), duration of one iteration of the scalar multiplication loop
+                    (\(iter\_time\)) and the standard deviation of the noise (\(sdev\)). For the <span class="tt">secp256r1</span> curve, the
+                    leakage \(\mathbf{L}\) can be modelled as a random variable:</p>
+
+                \[
+                \begin{aligned}
+                \mathbf{L} &= base + iter\_time \cdot \mathbf{B} + \mathbf{N} \\
+                \mathbf{B} &\sim \textbf{Geom}(p=1/2, (256, 255, \ldots, 0)) \\
+                \mathbf{N} &\sim \textbf{Norm}(0, sdev^2)
+                \end{aligned}
+                \]
+
+                <p>where \(\mathbf{B}\) represents the bit-length with a truncated geometric distribution and \(\mathbf{N}\) the noise.
+                    Only two of the above parameters, \(iter\_time\) and \(sdev\), affect how much the implementation leaks;
+                    we will use them to assess how easy it is to mount an attack.</p>
+
+                <div class="card">
+                    <div class="card-header bg-light" id="leakage-example-head">
+                        <h5 class="m-0">
+                            <button class="btn btn-dark" data-toggle="collapse" data-target="#leakage-example-body"
+                                    aria-expanded="false" aria-controls="#leakage-example-body" title="Toggle content">
+                                <i class="fas fa-fw fa-plus-square"></i> Example (no leakage)
+                            </button>
+                        </h5>
+                    </div>
+
+                    <div class="collapse custom-collapsible" id="leakage-example-body" aria-labelledby="leakage-example-head">
+                        <div class="card-body">
+                            <p>Data collected from 500k signatures on <span class="tt">secp256r1</span>.</p>
+                            <p>These images come from <span class="tt">OpenSSL</span>, contain no leakage and show how a well-behaving implementation
+                            looks like in these types of heatmaps.</p>
+                            <a href="assets/img/example/example_msb.png" data-toggle="lightbox"><img
+                                    src="assets/img/example/example_msb.png" id="example-fig1" class="figure"
+                                    alt="Heatmap of nonce MSB and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#example-fig1" title="Permanent link">Figure e1:</a></div> <div class="caption-body">Heatmap of nonce MSB and signature time.</div></div>
+                            <a href="assets/img/example/example_hw.png" data-toggle="lightbox"><img
+                                    src="assets/img/example/example_hw.png" id="example-fig2" class="figure"
+                                    alt="Heatmap of nonce Hamming weight and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#example-fig2" title="Permanent link">Figure e2:</a></div> <div class="caption-body">Heatmap of nonce Hamming weight and signature time.</div></div>
+                            <a href="assets/img/example/example_bitlength.png" data-toggle="lightbox"><img
+                                    src="assets/img/example/example_bitlength.png" id="example-fig3" class="figure"
+                                    alt="Heatmap of nonce bit-length and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#example-fig3" title="Permanent link">Figure e3:</a></div> <div class="caption-body">Heatmap of nonce bit-length and signature time.</div></div>
+                        </div>
+                    </div>
+                </div>
+                <br/>
+                <div class="card">
+                    <div class="card-header bg-light" id="leakage-athena-head">
+                        <h5 class="m-0">
+                            <button class="btn btn-dark" data-toggle="collapse" data-target="#leakage-athena-body"
+                                    aria-expanded="false" aria-controls="#leakage-athena-body" title="Toggle content">
+                                <i class="fas fa-fw fa-plus-square"></i> Athena IDProtect
+                            </button>
+                        </h5>
+                    </div>
+
+                    <div class="collapse custom-collapsible" id="leakage-athena-body" aria-labelledby="leakage-athena-head">
+                        <div class="card-body">
+                            <p>Figures below are from data collected from 500k signatures on <span class="tt">secp256r1</span>.</p>
+                            <a href="assets/img/athena/linear_time.png" data-toggle="lightbox"><img
+                                    src="assets/img/athena/linear_time.png" id="athena-fig1" class="figure"
+                                    alt="Plot of private key bit-length and scalar multiplication time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#athena-fig1" title="Permanent link">Figure a1:</a></div> <div class="caption-body">Clear linear dependency of the length of scalar multiplication on private key bit-length.</div></div>
+                            <a href="assets/img/athena/msb_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/athena/msb_hist.png" id="athena-fig2" class="figure"
+                                    alt="Heatmap of nonce MSB and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#athena-fig2" title="Permanent link">Figure a2:</a></div> <div class="caption-body">Time dependency on bit-length visible in nonce MSB heatmap.</div></div>
+                            <a href="assets/img/athena/hw_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/athena/hw_hist.png" id="athena-fig3" class="figure"
+                                    alt="Heatmap of nonce Hamming weight and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#athena-fig3" title="Permanent link">Figure a3:</a></div> <div class="caption-body">Time dependency on bit-length somewhat visible in nonce Hamming weight heatmap.</div></div>
+                            <a href="assets/img/athena/bit_length_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/athena/bit_length_hist.png" id="athena-fig4" class="figure"
+                                    alt="Heatmap of nonce bit-length and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#athena-fig4" title="Permanent link">Figure a4:</a></div> <div class="caption-body">Clear time dependency on nonce bit-length, disturbed by the geometric distribution of bit-length.</div></div>
+                            <a href="assets/img/athena/length_hists.png" data-toggle="lightbox"><img
+                                    src="assets/img/athena/length_hists.png" id="athena-fig5" class="figure"
+                                    alt="Histograms of nonce bit-length and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#athena-fig5" title="Permanent link">Figure a5:</a></div> <div class="caption-body">Time dependency clearly visible in grouping of signatures by bit-length.</div></div>
+                            <a href="assets/img/athena/athena_powertrace_leak.png" data-toggle="lightbox"><img
+                                    src="assets/img/athena/athena_powertrace_leak.png" id="athena-fig6" class="figure"
+                                    alt="Powertrace of an ECDSA signing operation."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#athena-fig6" title="Permanent link">Figure a6:</a></div> <div class="caption-body">Clear dynamic bound on the number of loops in scalar multiplication is visible in a powertrace of an ECDSA signing operation.</div></div>
+                        </div>
+                    </div>
+                </div>
+                <br/>
+                <div class="card">
+                    <div class="card-header bg-light" id="leakage-gcrypt-head">
+                        <h5 class="m-0">
+                            <button class="btn btn-dark" data-toggle="collapse" data-target="#leakage-gcrypt-body"
+                                    aria-expanded="false" aria-controls="#leakage-gcrypt-body" title="Toggle content">
+                                <i class="fas fa-fw fa-plus-square"></i> libgcrypt
+                            </button>
+                        </h5>
+                    </div>
+
+                    <div class="collapse custom-collapsible" id="leakage-gcrypt-body" aria-labelledby="leakage-gcrypt-head">
+                        <div class="card-body">
+                            <p>Figures below are from data collected from 200k signatures on <span class="tt">secp256r1</span> using <span class="tt">libgcrypt 1.8.4</span>.</p>
+                            <a href="assets/img/gcrypt/msb_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/gcrypt/msb_hist.png" id="gcrypt-fig1" class="figure"
+                                    alt="Heatmap of nonce MSB and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#gcrypt-fig1" title="Permanent link">Figure g1:</a></div> <div class="caption-body">Time dependency on bit-length visible in nonce MSB heatmap.</div></div>
+                            <a href="assets/img/gcrypt/hw_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/gcrypt/hw_hist.png" id="gcrypt-fig2" class="figure"
+                                    alt="Heatmap of nonce Hamming weight and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#gcrypt-fig2" title="Permanent link">Figure g2:</a></div> <div class="caption-body">Time dependency on bit-length somewhat visible in nonce Hamming weight heatmap.</div></div>
+                            <a href="assets/img/gcrypt/bit_length_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/gcrypt/bit_length_hist.png" id="gcrypt-fig3" class="figure"
+                                    alt="Heatmap of nonce bit-length and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#gcrypt-fig3" title="Permanent link">Figure g3:</a></div> <div class="caption-body">Clear time dependency on nonce bit-length, disturbed by the geometric distribution of bit-length.</div></div>
+                        </div>
+                    </div>
+                </div>
+                <br/>
+                <div class="card">
+                    <div class="card-header bg-light" id="leakage-wolfcrypt-head">
+                        <h5 class="m-0">
+                            <button class="btn btn-dark" data-toggle="collapse" data-target="#leakage-wolfcrypt-body"
+                                    aria-expanded="false" aria-controls="#leakage-wolfcrypt-body" title="Toggle content">
+                                <i class="fas fa-fw fa-plus-square"></i> wolfSSL
+                            </button>
+                        </h5>
+                    </div>
+
+                    <div class="collapse custom-collapsible" id="leakage-wolfcrypt-body" aria-labelledby="leakage-wolfcrypt-head">
+                        <div class="card-body">
+                            <p>The leakage in <span class="tt">wolfCrypt</span> was very small, and potentially not exploitable. Figures
+                                below are from data collected from 500k signatures on <span class="tt">secp256r1</span> using <span class="tt">wolfSSL 4.0.0</span>.</p>
+                            <a href="assets/img/wolfcrypt/msb_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/wolfcrypt/msb_hist.png" id="wolfcrypt-fig1" class="figure"
+                                    alt="Heatmap of nonce MSB and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#wolfcrypt-fig1" title="Permanent link">Figure w1:</a></div> <div class="caption-body">Time dependency on bit-length visible in nonce MSB heatmap.</div></div>
+                            <a href="assets/img/wolfcrypt/hw_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/wolfcrypt/hw_hist.png" id="wolfcrypt-fig2" class="figure"
+                                    alt="Heatmap of nonce Hamming weight and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#wolfcrypt-fig2" title="Permanent link">Figure w2:</a></div> <div class="caption-body">Time dependency on bit-length not visible, because it is very small.</div></div>
+                            <a href="assets/img/wolfcrypt/bit_length_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/wolfcrypt/bit_length_hist.png" id="wolfcrypt-fig3" class="figure"
+                                    alt="Heatmap of nonce bit-length and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#wolfcrypt-fig3" title="Permanent link">Figure w3:</a></div> <div class="caption-body">Time dependency on bit-length not visible, because it is very small.</div></div>
+                        </div>
+                    </div>
+                </div>
+                <br/>
+                <div class="card">
+                    <div class="card-header bg-light" id="leakage-matrixssl-head">
+                        <h5 class="m-0">
+                            <button class="btn btn-dark" data-toggle="collapse" data-target="#leakage-matrixssl-body"
+                                    aria-expanded="false" aria-controls="#leakage-matrixssl-body" title="Toggle content">
+                                <i class="fas fa-fw fa-plus-square"></i> MatrixSSL
+                            </button>
+                        </h5>
+                    </div>
+
+                    <div class="collapse custom-collapsible" id="leakage-matrixssl-body" aria-labelledby="leakage-matrixssl-head">
+                        <div class="card-body">
+                            <p>Figures below are from data collected from 120k signatures on <span class="tt">secp256r1</span> using <span class="tt">MatrixSSL 4.2.1</span>.</p>
+                            <a href="assets/img/matrixssl/msb_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/matrixssl/msb_hist.png" id="matrixssl-fig1" class="figure"
+                                    alt="Heatmap of nonce MSB and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#matrixssl-fig1" title="Permanent link">Figure m1:</a></div> <div class="caption-body">Time dependency on bit-length visible in nonce MSB heatmap.</div></div>
+                            <a href="assets/img/matrixssl/hw_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/matrixssl/hw_hist.png" id="matrixssl-fig2" class="figure"
+                                    alt="Heatmap of nonce Hamming weight and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#matrixssl-fig2" title="Permanent link">Figure m2:</a></div> <div class="caption-body">Time dependency on bit-length somewhat visible in nonce Hamming weight heatmap. Time dependency on Hamming weight is also visible.</div></div>
+                            <a href="assets/img/matrixssl/bit_length_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/matrixssl/bit_length_hist.png" id="matrixssl-fig3" class="figure"
+                                    alt="Heatmap of nonce bit-length and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#matrixssl-fig3" title="Permanent link">Figure m3:</a></div> <div class="caption-body">Clear time dependency on nonce bit-length, disturbed by the geometric distribution of bit-length.</div></div>
+                        </div>
+                    </div>
+                </div>
+                <br/>
+                <div class="card">
+                    <div class="card-header bg-light" id="leakage-sunec-head">
+                        <h5 class="m-0">
+                            <button class="btn btn-dark" data-toggle="collapse" data-target="#leakage-sunec-body"
+                                    aria-expanded="false" aria-controls="#leakage-sunec-body" title="Toggle content">
+                                <i class="fas fa-fw fa-plus-square"></i> SunEC
+                            </button>
+                        </h5>
+                    </div>
+
+                    <div class="collapse custom-collapsible" id="leakage-sunec-body" aria-labelledby="leakage-sunec-head">
+                        <div class="card-body">
+                            <p>Figures below are from data collected from 500k signatures on <span class="tt">sect233r1</span> using <span class="tt">JDK 8 SunEC provider</span>.</p>
+                            <a href="assets/img/sunec/msb_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/sunec/msb_hist.png" id="sunec-fig1" class="figure"
+                                    alt="Heatmap of nonce MSB and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#sunec-fig1" title="Permanent link">Figure s1:</a></div> <div class="caption-body">Time dependency on bit-length visible in nonce MSB heatmap.</div></div>
+                            <a href="assets/img/sunec/hw_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/sunec/hw_hist.png" id="sunec-fig2" class="figure"
+                                    alt="Heatmap of nonce Hamming weight and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#sunec-fig2" title="Permanent link">Figure s2:</a></div> <div class="caption-body">Time dependency on bit-length somewhat visible in nonce Hamming weight heatmap.</div></div>
+                            <a href="assets/img/sunec/bit_length_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/sunec/bit_length_hist.png" id="sunec-fig3" class="figure"
+                                    alt="Heatmap of nonce bit-length and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#sunec-fig3" title="Permanent link">Figure s3:</a></div> <div class="caption-body">Clear time dependency on nonce bit-length, disturbed by the geometric distribution of bit-length.</div></div>
+                        </div>
+                    </div>
+                </div>
+                <br/>
+                <div class="card">
+                    <div class="card-header bg-light" id="leakage-cryptopp-head">
+                        <h5 class="m-0">
+                            <button class="btn btn-dark" data-toggle="collapse" data-target="#leakage-cryptopp-body"
+                                    aria-expanded="false" aria-controls="#leakage-cryptopp-body" title="Toggle content">
+                                <i class="fas fa-fw fa-plus-square"></i> Crypto++
+                            </button>
+                        </h5>
+                    </div>
+
+                    <div class="collapse custom-collapsible" id="leakage-cryptopp-body" aria-labelledby="leakage-cryptopp-head">
+                        <div class="card-body">
+                            <p>Figures below are from data collected from 100k signatures on <span class="tt">sect233r1</span> using <span class="tt">Crypto++ 8.2.0</span>.</p>
+                            <a href="assets/img/cryptopp/msb_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/cryptopp/msb_hist.png" id="cryptopp-fig1" class="figure"
+                                    alt="Heatmap of nonce MSB and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#cryptopp-fig1" title="Permanent link">Figure c1:</a></div> <div class="caption-body">Time dependency on bit-length visible in nonce MSB heatmap.</div></div>
+                            <a href="assets/img/cryptopp/hw_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/cryptopp/hw_hist.png" id="cryptopp-fig2" class="figure"
+                                    alt="Heatmap of nonce Hamming weight and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#cryptopp-fig2" title="Permanent link">Figure c2:</a></div> <div class="caption-body">Time dependency on bit-length somewhat visible in nonce Hamming weight heatmap.</div></div>
+                            <a href="assets/img/cryptopp/bit_length_hist.png" data-toggle="lightbox"><img
+                                    src="assets/img/cryptopp/bit_length_hist.png" id="cryptopp-fig3" class="figure"
+                                    alt="Heatmap of nonce bit-length and signature time."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#cryptopp-fig3" title="Permanent link">Figure c3:</a></div> <div class="caption-body">Clear time dependency on nonce bit-length, disturbed by the geometric distribution of bit-length.</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 id="details-hnp">Hidden Number Problem</h4>
+                <p><a href="#hardness">Boneh & Venkatesan [1]</a> introduced the <i>Hidden Number Problem</i> (HNP),
+                    for proving the hardness of computing the most significant bits of keys in the Diffie-Hellman
+                    scheme. They also showed a way to solve it by transforming it into a lattice <i>Closest Vector Problem</i> (CVP) solvable via lattice reduction and Babai's nearest plane algorithm. This is useful to us, because in the cases
+                    of <span class="tt">DSA</span>/<span class="tt">ECDSA</span>/<span class="tt" style="text-decoration: line-through;">EdDSA</span> and even attestation systems such as
+                    <span class="tt">EPID</span> <a href="#cachequote">[8]</a> or <span class="tt">ECDAA</span> <a href="#fido-ecdaa">[9]</a>, knowledge of the most significant bits of nonces with the goal of computing the private key can be turned into a Hidden Number Problem
+                    instance, which can be turned into an instance of the Closest Vector Problem and solved using the methods of
+                    lattice reduction. Next we will introduce the HNP and show how knowledge of most significant bits of nonces can be
+                    turned into one for <span class="tt">ECDSA</span>.</p>
+
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <b>Notation:</b> In the following text:
+                        <ul>
+                            <li>\( \lfloor x \rfloor_n \) denotes the reduction to \( x \gmod{n} \).</li>
+                            <li>\( \lvert x \rvert_n = \min_{a \in \mathbb{Z}} \lvert x - an \rvert\) denotes the distance to the nearest integer multiple of \( n \).</li>
+                            <li>\( p \) denotes a prime number, \( g \) is a generator of \( \mathbb{Z}_n \).</li>
+                            <li>\( G \) denotes a point of order \( n \) on an elliptic curve, usually the generator.</li>
+                            <li>\( d \) denotes the private key, and \( e \)the amount of signatures.</li>
+                            <li>\( H(m) \) denotes the rightmost \( \log_2(n) \) bits of the hash of the message \( m \), interpreted as an integer \( \gmod{n} \).</li>
+                            <li>\( k \) denotes the nonce used in signing.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="definition card bg-light" id="def-approximation">
+                    <div class="card-body">
+                        <b>Definition 1 (Approximations):</b> By \(\mathrm{APP}_{l,n}(y)\), we will denote any \(u\in\mathbb{Q}\) satisfying
+                        \[\lvert y - u\rvert_n \leq n/2^{l}.\]
+                        Note that generally there are many such \(u\).
+                    </div>
+                </div>
+                <div class="definition card bg-light" id="def-msmb">
+                    <div class="card-body">
+                        <b>Definition 2 (Most Significant Modular Bits):</b> The \(l>0\) most significant modular bits of an element \(y\in\mathbb{Z}_n\) (regarded as an integer in \([0, n-1]\)) are the unique integer \(\mathrm{MSMB}_{l,n}(y)\) such that
+                        \[0 \leq y - \mathrm{MSMB}_{l,n}(y)\cdot n/2^l < n/2^l.\]
+                    </div>
+                </div>
+
+                <p>It is worth observing that the most significant modular bits give rise to a specific approximation of \(y\). We can see directly from <a href="#def-msmb">definition 2</a> that</p>
+                \[\lvert y - \mathrm{MSMB}_{l,n}(y)\cdot n/2^l \rvert < n/2^{l},\]
+                and since the absolute value argument already lies in \([-n/2, n/2]\), it is equivalent to
+                \[\lvert y - \mathrm{MSMB}_{l,n}(y)\cdot n/2^l \rvert_n < n/2^{l}.\]
+
+                Thus \(\mathrm{MSMB}_{l,n}(y)\cdot n/2^l\) may be taken as \(\mathrm{APP}_{l,n}(y)\). Also, after recentering the bits, \(\mathrm{MSMB}_{l,n}(y) \cdot n/2^l - n/2^{l + 1}\) may be taken as \(\mathrm{APP}_{l+1,n}(y)\).
+
+                <div class="definition card bg-light" id="def-hnp">
+                    <div class="card-body">
+                        <b>Definition 3 (Hidden Number Problem):</b> Given \( e \) approximations \(a_i = \mathrm{APP}_{l_i,n}(k_i)\), where \(k_i = \lfloor \alpha t_i - u_i \rfloor_n\),
+                        for many known \(t_i\) that are uniformly and independently distributed in \(\mathbb{Z}_n^*\), known \(u_i\) and a fixed secret \(\alpha\in \mathbb{Z}_n\), find \(\alpha\).
+                    </div>
+                </div>
+
+                This general problem can be equivalently stated as, given \( e \) inequalities as below, with known \( a_i \) and \( l_i \) and with unknown \( \alpha \), find it:
+                \[
+                \lvert k_i - a_i\rvert_n < n/2^{l_i}
+                \]
+
+                <h5>ECDSA</h5>
+                In case of <span class="tt">ECDSA</span>, given the signature \( (r, s) \in \mathbb{Z}_n \times \mathbb{Z}_n \) on message
+                \( m \):
+
+                \[
+                \begin{aligned}
+                r &= ([k]G)_x \pmod{n} \\
+                s &= k^{-1} (H(m) + r d) \pmod{n}
+                \end{aligned}
+                \]
+
+                Rewriting we have:
+                \[
+                \begin{aligned}
+                k &= s^{-1} (H(m) + r d) \pmod{n} \\
+                k &= s^{-1} H(m) + s^{-1} r d \pmod{n}
+                \end{aligned}
+                \]
+
+                Information about the most significant bits of \( k \), the nonce, can be used to construct an instance of the HNP.
+                <div class="definition card bg-light" id="def-ecdsa-hnp">
+                    <div class="card-body">
+                        <b>Definition 4 (ECDSA Hidden Number Problem):</b> Given \( e \) approximations \(a_i = \mathrm{APP}_{l_i,n}(k_i)\) of the nonces \( k_i \) of known messages \( m_i \),
+                        find \( d \) (private key).
+                    </div>
+                </div>
+                This gives us \( e \) inequalitites of the form:
+
+                \[
+                \begin{aligned}
+                \lfloor k_i - a_i \rfloor_n &< n/2^{l_i} \\
+                %\lvert \lfloor k_i \rfloor_n - n/2^{l_i + 1} - a_i \rvert &< n/2^{l_i + 1} \\
+                %\lvert \lfloor k_i \rfloor_n - n/2^{l_i + 1} - a_i \rvert_n &< n/2^{l_i + 1}
+                \lvert s_i^{-1} \left(d r_i + H(m_i)\right) - a_i \rvert_n &< n/2^{l_i}\\
+                \lvert d\lfloor s_i^{-1}r_i \rfloor_n + \lfloor s_i^{-1} H(m_i)\rfloor_n - a_i\rvert_n &< n/2^{l_i}
+                \end{aligned}
+                \]
+
+                The above gives the HNP inequality with \(t_i = s_i^{-1} r_i\) and \(u_i = - s_i^{-1} H(m_i)\) as per <a href="#def-hnp">definition 3</a>. However, in this
+                case \(t\) is not completely uniform in \( \mathbb{Z}_n^{\star} \), its distribution is just close enough that we do not have
+                to care about it <a href="#insecurity">[2]</a>. In our case of bit-length leakage, we will only ever create HNP inequalities with \( a_i = MSMB_{l_i,n}(k_i) = 0 \),
+                which simplifies the above equation to:
+
+                \[
+                \lvert t_i d - u_i \rvert_n \lt n/2^{l_i}
+                \]
+
+                <h5>Solving</h5>
+                Given \( e \) HNP inequalities of the form \( \lvert t_i d - u_i \rvert_n \lt n/2^{l_i} \), we can construct a lattice given by the rows of the matrix \( \mathbf{M} \)
+                <a href="#rohnp">[7]</a>:
+
+                \[
+                \mathbf{M} = \begin{pmatrix}
+                2^{l_1 + 1}n & 0 & 0 & \ldots & 0 & 0 \\
+                0 & 2^{l_2 +1}n & 0 & \ldots & 0 & 0 \\
+                & \vdots & & & \vdots & \\
+                0 & 0 & 0 & \ldots & 2^{l_e +1}n & 0 \\
+                2^{l_1 + 1}t_1 & 2^{l_2 +1}t_2 & 2^{l_3 +1}t_3 & \ldots & 2^{l_e +1}t_e & 1
+                \end{pmatrix}
+                \]
+
+                Where \( l_i \) is the amount of known most significant bits of \( k_i \) from the i-th signature.
+                Then, by our construction from the HNP inequalities above, the vector \(\mathbf{u} = ( 2^{l_1 + 1}u_1, \ldots, 2^{l_e + 1}u_e, 0) \) is a vector unusually close to a
+                lattice point. The closest lattice point often has a form \( \mathbf{v} = ( 2^{l_1 + 1} t_1 d, \ldots, 2^{l_e + 1} t_e d, d )
+                \), finding this lattice point then reveals the private key \( d \). To do so, one needs to solve the Closest Vector Problem.
+                There are several algorithms for solving the CVP, the original paper used Babai's nearest plane algorithm with LLL for lattice reduction.
+                One could also use BKZ for lattice reduction and then solve CVP by enumeration. There is also a technique of transforming an instance of CVP to a Shortest Vector Problem (SVP) by embedding the matrix and the target vector:
+
+                \[
+                C = \begin{pmatrix}
+                \mathbf{M} & 0 \\
+                \mathbf{u} & n
+                \end{pmatrix}
+                \]
+
+                <p>Then, one can solve SVP by lattice reduction and either looking directly at basis vectors or by further enumeration to find the shortest vector.
+                Our construction contained a number of heuristic arguments, such as "often has a form", or "is unusually close to a lattice point", this shows that
+                the technique is not exact. We also never stated how many HNP inequalities with what \(l_i\) need to be included in the lattice to find the correct private key.</p>
+
+                <p>Generally, each inequality adds \( l_i \) bits of information and the problem starts to be solvable (theoretically) as soon as the lattice contains more information
+                than the unknown information in the private key. The number of leading zero bits, which is equal to the used information in a signature in our attack, follows a truncated geometric
+                distribution with \(p = \frac{1}{2}\). Due to this, the expected amount of information in \(N\) signatures can be computed as
+                \(N \cdot \sum_{i=2}^{\lceil \log_2(n) \rceil} 2^{-l_i-1} \cdot l_i \approx \frac{3}{4}N\) assuming only signatures with \( l_i \geq 2 \) are used.
+                Adding inequalities with $l_i < 2$ generally does not help, as those will not lead to the desired vector being unusually close to a lattice point.</p>
+
+                <p>Using the above formula, we obtain the expected minimum of around \(N = 342\) signatures for a 256-bit private key.
+                Since the amount of information is linear in \(N\) it can be computed as \(N \approx \frac{4}{3} \cdot |K|\) for size \(|K|\) of the private key.
+                Adding dimensions is also not for free, as the runtime of lattice algorithms grows significantly with an increase in the number of dimensions.
+                However, adding some overhead of information, such that the lattice contains around \( 1.3 \) times the information of the private key, was shown to improve the success rate <a href="#rohnp">[7]</a>.</p>
+
+                <h4 id="details-improvements">Attack improvements</h4>
+                <p>The nonces \(k_i\) are generated uniformly at random; we can thus expect that the number of most significant zero bits follows
+                    a truncated geometric distribution when \(n\) is close to a power of two. Thus roughly for one-half of the nonces \(l_i=0\),
+                    for one-quarter of nonces \(l_i=1\), and so on. Assuming a one-to-one linear dependency between the bit-length of \(k_i\) and
+                    the duration of signing, we would obtain a clear method of assigning bounds to the signatures, sort them by duration and
+                    apply the above distribution. However, the real timing leakage is noisy and the distributions of duration for signatures
+                    with different bit-lengths overlap (see Figures <a href="#athena-fig4" class="figure-link">a4</a>,<a href="#gcrypt-fig3" class="figure-link">g3</a>,<a href="#matrixssl-fig3" class="figure-link">m3</a> and <a href="#sunec-fig3" class="figure-link">s3</a>).</p>
+
+                <p>Our main improvement to the attack calculates bounds according to the above truncated geometric distribution based on \(N\),
+                    the number of signatures collected. One half of signatures has \(l_i=0\), one quarter has \(l_i=1\), etc.
+                    Then simply the fastest \(e\) signatures are taken with their calculated bounds.</p>
+
+                <a href="assets/img/geomN_residuals.png" data-toggle="lightbox"><img
+                        src="assets/img/geomN_residuals.png" id="geom-residuals-fig" class="figure"
+                        alt="Residuals"/></a>
+                <div class="caption"><div class="caption-head"><a href="#geom-residuals-fig" title="Permanent link">Figure x1:</a></div> <div class="caption-body">
+                    Plot of the geometric bounds (<b style="font-weight: bold">geom</b>) with \(N = 2000\) and \(e = 100\), along with a
+                    random sample of the true leading zero bits from simulated data (<b style="font-weight: bold">sim</b>) and
+                    boxplots of the distribution of the difference of the simulated data and the
+                    bounds (<b style="font-weight: bold">sim - geom</b>). Negative values imply an error; positive implies some
+                    available information is unused.</div></div>
+
+                <h5>Evaluation</h5>
+                We evaluated our improvements using four separate data sets (denoted as <span class="tt">sim</span>, <span class="tt">sw</span>, <span class="tt">card</span>,
+                <span class="tt">tpm</span>) with varying levels of noise. All the datasets used consist of at least 50 000 <span class="tt">ECDSA</span>
+                signatures over the secp256r1 curve from which we randomly sample \(N\) signatures for the
+                evaluation of our attacks.
+
+                <table id="data-download">
+                    <thead>
+                    <tr>
+                        <td>Dataset</td>
+                        <td>\(base\)</td>
+                        <td>\(iter\_time\)</td>
+                        <td>\(sdev\)</td>
+                        <td>Download</td>
+                    </tr>
+                    </thead>
+                    <tr>
+                        <td><span class="tt">sim</span></td>
+                        <td>0</td>
+                        <td>1</td>
+                        <td>0</td>
+                        <td><a href="assets/data/data_sim.csv"><i class="fas fa-file-alt"></i> csv</a></td>
+                    </tr>
+                    <tr>
+                        <td><span class="tt">sw</span></td>
+                        <td>453.4</td>
+                        <td>12.7</td>
+                        <td>17.2</td>
+                        <td><a href="assets/data/data_gcrypt.csv"><i class="fas fa-file-alt"></i> csv</a></td>
+                    </tr>
+                    <tr>
+                        <td><span class="tt">tpm</span></td>
+                        <td>27047.3</td>
+                        <td>236.1</td>
+                        <td>211.3</td>
+                        <td><a href="assets/data/data_tpmfail_stm.csv"><i class="fas fa-file-alt"></i> csv</a></td>
+                    </tr>
+                    <tr>
+                        <td><span class="tt">card</span></td>
+                        <td>43578.4</td>
+                        <td>371.5</td>
+                        <td>451.3</td>
+                        <td><a href="assets/data/data_athena.csv"><i class="fas fa-file-alt"></i> csv</a></td>
+                    </tr>
+                </table>
+
+                <ul>
+                    <li>The <span class="tt">sim</span> dataset contains simulated data for which there is an exact one-to-one
+                        correspondence between the signing duration and the bit-length of the random nonce
+                        with no systematic noise. However, these simulated signatures were still generated
+                        by uniformly randomly selecting the random nonce and computing the number of
+                        most-signifcant zero bits. A given sample is thus a result of a random process and
+                        varies naturally.</li>
+                    <li>The <span class="tt">sw</span> dataset contains data from a vulnerable version of the software cryptographic
+                        library <span class="tt">libgcrypt</span> collected from a simple C program on an ordinary Linux laptop.</li>
+                    <li>The <span class="tt">tpm</span> dataset contains data from the recent work of Moghimi et al. <a href="#tpm-fail">[14]</a>
+                        collected from a vulnerable STMicroelectronics TPM (Trusted Platform Module).
+                        The data was collected via a custom Linux kernel module and contained a relatively
+                        small amount of noise.</li>
+                    <li>The <span class="tt">card</span> dataset contains data from the vulnerable <span class="tt">Athena IDProtect</span> smartcard,
+                        collected by a Python script running on an ordinary Linux laptop with a standard
+                        standalone smartcard reader connected. Such measurements are particularly noisy
+                        due to the complex software stack and hardware components between the script and
+                        a card.</li>
+                </ul>
+
+                <div class="card">
+                    <div class="card-header bg-light" id="evaluation-heatmaps-head">
+                        <h5 class="m-0">
+                            <button class="btn btn-dark" data-toggle="collapse" data-target="#evaluation-heatmaps-body"
+                                    aria-expanded="true" aria-controls="#evaluation-heatmaps-body" title="Toggle content">
+                                <i class="fas fa-fw fa-minus-square"></i> Heatmaps of success rate
+                            </button>
+                        </h5>
+                    </div>
+
+                    <div class="collapse custom-collapsible show" id="evaluation-heatmaps-body" aria-labelledby="leakage-example-head">
+                        <div class="card-body">
+                            <a href="assets/img/const3.png" data-toggle="lightbox"><img
+                                    src="assets/img/const3.png" id="heatmap-const-fig" class="figure"
+                                    alt="Heatmap of success rate (out of 5 tries) for constant bounds with c = 3"/></a>
+                            <div class="caption"><div class="caption-head"><a href="#heatmap-const-fig" title="Permanent link">Figure x2:</a></div> <div class="caption-body">Heatmap of success rate (out of 5 tries) for constant bounds with \(\forall i: l_i = 3\).</div></div>
+                            <a href="assets/img/geomN.png" data-toggle="lightbox"><img
+                                    src="assets/img/geomN.png" id="heatmap-geom-fig" class="figure"
+                                    alt="Heatmap of success rate (out of 5 tries) for our geometric bounds."/></a>
+                            <div class="caption"><div class="caption-head"><a href="#heatmap-geom-fig" title="Permanent link">Figure x3:</a></div> <div class="caption-body">Heatmap of success rate (out of 5 tries) for our geometric bounds.</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 id="details-reasons">Root causes of the vulnerability</h4>
+                <p>We consider there to be several root causes for this group of vulnerabilities. One of them is that knowledge of the
+                    fragility of <span class="tt">DSA</span> nonces to lattice attacks does not seem to be widespread amongst developers of
+                    cryptographic software. There are four issues regarding nonce use in <span class="tt">DSA</span>:
+                    nonce reuse, bias in nonce randomness, nonce bit-length leaks and other leaks of partial information about nonces. Due
+                    to the aforementioned lattice attacks and their variants, all of these issues might lead to a private key recovery attack.
+                </p>
+                <p>Deterministic generation of nonces, as done in <span class="tt">EdDSA</span> or <span class="tt">RFC6979</span> mitigates
+                    the issues of nonce reuse and nonce bias. However, it does not address the latter two in any significant way.
+                    Deterministic generation of nonces might actually help the attacker in case the attacker has a noisy side-channel
+                    leaking nonce bit-length or other information about the nonce. If the attacker can observe the signing of the same
+                    message multiple times, they might use the fact that the same nonce was used to significantly reduce the noise in the side-channel.</p>
+                <p>Another cause for this group of vulnerabilities is that not leaking the bit-length of the scalar used in scalar
+                    multiplication is surprisingly hard. Take almost any algorithm that processes the scalar in a left to right fashion, the
+                    Montgomery ladder for example, and instantiate it with addition formulas that are incomplete (cannot correctly compute
+                    \( \mathcal{O} + P \) or \( 2\mathcal{O} \) in a side-channel indistinguishable way from \( P + Q \) and \( 2P \)), then
+                    a side-channel leaking the bit-length will be present.</p>
+                <p>At the start of the ladder for computing a multiple of point
+                    \( G\), the two ladder variables are initialized either as \( R_0 = \mathcal{O} \) and \( R_1 = G \) or as
+                    \( R_0 = G \) and \( R_1 = 2G \). In the first case, the computation might start at any bit larger that the most
+                    significant set bit in the scalar, i.e. it can be a fixed loop bound, for example on the bit-length of the order of the
+                    generator, as seen in <a href="#montgomery-complete">algorithm 1</a>. However, until the first set bit is encountered,
+                    all of the additions and doublings will involve the point at
+                    infinity and because of our assumption that the formulas used are incomplete, they will leak this through some side-channel.
+                    This leak might have the form of short-circuiting addition formulas, which check whether the point at infinity was input and short circuit accordingly to satisfy
+                    \( \mathcal{O} + P = P \) and \( 2\mathcal{O} = \mathcal{O} \). This is the case in <span class="tt">libgcrypt</span>
+                    for example, and was the reason why simply fixing a loop bound in scalar multiplication was not enough to fix the issue.
+                    The formulas might leak the fact that the point at infinity is present through different channels than timing: power or
+                    EM side-channels come to mind, as the point at infinity is often represented using only \( 0 \) or \( 1 \) values, which
+                    can often be distinguishable in multiplication and addition on a power trace.</p>
+
+                <pre id="montgomery-complete" class="pseudocode" style="display:none;">
+                \begin{algorithm}
+                \caption{Montgomery ladder (complete)}
+                \begin{algorithmic}
+                \PROCEDURE{Ladder}{$G, k = (k_{l}, \ldots, k_0)_2$}
+                    \STATE $R_0 = \mathcal{O}$; $R_1 = G$
+                    \FOR{$i = l$ \DOWNTO 0}
+                        \STATE $R_{\neg k_i} = R_0 + R_1$; $R_{k_i} = 2R_{k_i}$
+                    \ENDFOR
+                    \RETURN $R_0$
+                \ENDPROCEDURE
+                \end{algorithmic}
+                \end{algorithm}
+                </pre>
+
+                <p>In the second case, the most significant bit of the scalar must be explicitly found, as seen in
+                    <a href="#montgomery-incomplete">algorithm 2</a> and the ladder must start at that bit, because the variables were
+                    initialized into a state such that the point at infinity will not appear so that incomplete formulas could be used and no
+                    infinity ever handled. If the loop started at some fixed bit past the most significant bit set, this algorithm would compute an incorrect result.
+                    However, this clearly leaks the bit-length through timing alone, because of the loop bound on the bit-length of the
+                    scalar.</p>
+
+                <pre id="montgomery-incomplete" class="pseudocode" style="display:none;">
+                \begin{algorithm}
+                \caption{Montgomery ladder (incomplete)}
+                \begin{algorithmic}
+                \PROCEDURE{Ladder}{$G, k = (k_{l}, \ldots, k_0)_2$}
+                    \STATE $R_0 = G$; $R_1 = 2G$
+                    \FOR{$i = \vert k \vert - 1$ \DOWNTO 0}
+                        \STATE $R_{\neg k_i} = R_0 + R_1$; $R_{k_i} = 2R_{k_i}$
+                    \ENDFOR
+                    \RETURN $R_0$
+                \ENDPROCEDURE
+                \end{algorithmic}
+                \end{algorithm}
+                </pre>
+
+                <p>Furthermore, in the name of performance, cryptographic libraries often include multiple optimized scalar
+                    multiplication algorithms that are either chosen at compile time or even at runtime, for specific classes
+                    of curves, or for use by a specific cryptosystem. This increases the effort necessary to test and verify that all of
+                    the possible configurations are constant time and not vulnerable. As mentioned before, there are interactions
+                    between the individual components such as addition formulas, coordinate systems and the scalar multiplication algorithm,
+                    a change in one of those can make an implementation vulnerable, like using incomplete formulas that short circuit
+                    the special cases. The configurations in libraries are often behind many define guards that enable parts of
+                    functions, such that even figuring out which scalar multiplication function using which coordinate model and
+                    addition formulas gets executed by a library for a particular operation on a particular curve is non-trivial.</p>
+
+                <p>Taking the example of the ECC implementation in <span class="tt">SunEC</span>/<span class="tt">OpenJDK</span>, in the
+                    latest version, it contains both a Java implementation of ECC and a native one. The Java one is chosen if one of the
+                    <span class="tt">secp256r1</span>, <span class="tt">secp384r1</span>, <span class="tt">secp521r1</span> curves is
+                    detected. The native implementation contains arithmetic for affine, Jacobian and Modified Jacobian coordinates. It
+                    contains 4 scalar multiplication algorithms for prime field curves and three wrapper functions which dispatch to
+                    appropriate functions. For some reason, the simple
+                    scalar multiplication in <span class="tt">ECDSA</span> is performed through a call to a multi-scalar multiplication
+                    wrapper, which dispatches it to a multi-scalar multiplication function which short circuits to a single-scalar
+                    multiplication wrapper, because some of the arguments are null, this wrapper then finally dispatches to the appropriate
+                    scalar multiplication function.</p>
+
+                <p>The cause of the vulnerability in cards using the <span class="tt">Atmel Toolbox 00.03.11.05</span> is obvious, the toolbox
+                    included functionality explicitly marked as not protected against SPA/DPA and timing attacks, which the vulnerable cards decided to use.</p>
+            </section>
+
+            <section>
+                <h3 id="disclosure"><a href="#disclosure" class="perma" title="Permanent link"><i
+                        class="fas fa-envelope fa-fw"></i></a> Responsible disclosure</h3>
+
+                <h5>Athena IDProtect</h5>
+                <p>We have discovered the vulnerability on 18.03.2019 in the Athena IDProtect card. To confirm its
+                    exploitablity we have investigated it in more
+                    detail in the following days and constructed a proof-of-concept which can be downloaded <a href="#poc">above</a>.
+                    Following this, we have contacted the responsible party: NXP Semiconductors,
+                    on 15.04.2019 at <code data-rot13="cfveg@akc.pbz" class="mail-inner">ENABLE@JAVASCRIPT</code>. We
+                    chose to contact NXP because the Athena Smart Card Solutions company, which produced the Athena
+                    IDProtect cards, no longer exists, as it was bought by NXP in 2015 <a href="#athena">[11]</a>.</p>
+                <p>NXP Semiconductors confirmed the existence of the vulnerability on 19.04.2019 and stated that they
+                    had migrated the former Athena IDProtect product line to
+                    their hardware shortly after the acquisition, which effectively mitigated the vulnerability in newer products
+                    based on the IDProtect line, long before our discovery, as it was present in the underlying cryptographic
+                    library which was replaced along with the hardware. Furthermore, NXP discontinued the former Athena IDProtect line of
+                    products a few years after the acquisition.</p>
+                <p>NXP Semiconductors was able to confirm that the Athena IDProtect card on the AT90SC chip indeed did use
+                    the fast and insecure version of the ECDSA functionality from the Atmel Toolbox. Quoting the reply from
+                NXP Semiconductors:</p>
+                <blockquote class="quote"><p>The vulnerability you found is in the Atmel crypto library that implements the ECC cryptography on the affected product.
+                    The Athena SCS product affected here is a legacy product which is no longer promoted by NXP.</p></blockquote>
+
+                <h5>WiseKey</h5>
+                <p>After communicating with NXP Semiconductors, we contacted WiseKey, the current holder of the intellectual property of
+                    the AT90 chip, cryptographic toolbox and associated items, and notified them of the vulnerability in the past versions of the Atmel toolbox.
+                    We then explained details of the vulnerability during a call with the WiseKey cryptography team. We have no information on
+                    whether current versions of the chip and toolbox are vulnerable.</p>
+
+                <h5>Libgcrypt</h5>
+                <p>After discovering the vulnerability on a smart-card, we analyzed many open-source cryptographic
+                    libraries, we discovered the vulnerability in <span class="tt">libgcrypt</span>
+                    on 09.07.2019, and notified the <span class="tt">libgcrypt</span> security team at <code data-rot13="frphevgl@tahct.bet"
+                                                                                     class="mail-inner">ENABLE@JAVASCRIPT</code>
+                    on 12.07.2019. We coordinated on mitigating the issue and arrived at a final working patch on 18.07.2019, which was
+                    merged on 07.08.2019.</p>
+
+                <h5>wolfSSL</h5>
+                <p>We discovered the leakage in <span class="tt">wolfSSL</span> on 09.07.2019 and notified <span class="tt">wolfSSL</span> at <code
+                        data-rot13="fhccbeg@jbysffy.pbz" class="mail-inner">ENABLE@JAVASCRIPT</code> on 11.07.2019. We received a patch
+                    for testing on 12.07.2019, which fixed the issue. The fix for the issue was merged to the master branch on 17.07.2019.</p>
+
+                <h5>MatrixSSL</h5>
+                <p>We discovered the vulnerability in <span class="tt">MatrixSSL</span> on 11.07.2019, we notified <span class="tt">MatrixSSL</span> support at
+                    <code data-rot13="fhccbeg@zngevkffy.bet" class="mail-inner">ENABLE@JAVASCRIPT</code> on 11.07.2019 and
+                    at <code data-rot13="wwbunaffba@vafvqrfrpher.pbz" class="mail-inner">ENABLE@JAVASCRIPT</code> (which looked like the maintainer's address from github commits) on
+                    12.07.2019. We have not heard back from any of the addresses. <span class="tt">MatrixSSL</span> had a release in the meantime, which fixed some issues
+                    but this vulnerability remains unpatched as of 02.10.2019.</p>
+
+				<h5>Crypto++</h5>
+                <p>We discovered the leakage in <span class="tt">Crypto++</span> on 22.07.2019 and notified the <span class="tt">Crypto++</span> team
+					on 25.07.2019. The main parts of the fix for the issue were merged to the master branch on 29.07.2019 and 05.08.2019.</p>
+
+				<h5>SunEC</h5>
+				<p>We discovered the leakage in <span class="tt">SunEC</span> on 22.07.2019 and notified Oracle at <code
+                        data-rot13="frpnyreg_hf@benpyr.pbz" class="mail-inner">ENABLE@JAVASCRIPT</code> on 26.07.2019. We provided Oracle with a patch
+                mitigating the issue on 14.08.2019. Furthermore, we notified the OpenJDK vulnerability group on 15.09.2019 at <code
+                            data-rot13="ihya-ercbeg@bcrawqx.wnin.arg" class="mail-inner">ENABLE@JAVASCRIPT</code>. The vulnerability remains unpatched in the 
+                            public <a href="https://hg.openjdk.java.net/jdk/jdk" target="_blank">jdk</a> repository as of 02.10.2019.</p>
+
+            </section>
+
+            <section>
+                <h3 id="team"><a href="#team" class="perma" title="Permanent link"><i
+                        class="fas fa-users fa-fw"></i></a> Team</h3>
+                The vulnerability was discovered by a team at the <a href="https://crocs.fi.muni.cz">Centre for Research on Cryptography and
+                Security</a> at Masaryk University in Czech Republic, using the self-developed and open-source <a
+                    href="https://crocs-muni.github.io/ECTester/" target="_blank"><i
+                    class="fas fa-credit-card"></i> ECTester</a> toolkit:
+                <ul>
+                    <li><a href="https://neuromancer.sk/about" target="_blank">Jan Jancar</a>: <a
+                            data-rot13="w08al@znvy.zhav.pm" class="mail-href mail-inner">ENABLE@JAVASCRIPT</a> <a href="https://twitter.com/j08ny" class="badge badge-primary"><i class="fab fa-twitter"></i> j08ny</a></li>
+                    <li><a href="https://crocs.fi.muni.cz/people/svenda" target="_blank">Petr Svenda</a>: <a
+                            data-rot13="firaqn@sv.zhav.pm" class="mail-href mail-inner">ENABLE@JAVASCRIPT</a> <a href="https://twitter.com/rngsec" class="badge badge-primary"><i class="fab fa-twitter"></i> rngsec</a></li>
+                    <li><a href="https://www.muni.cz/en/people/408178-vladimir-sedlacek" target="_blank">Vladimir Sedlacek</a>: <a data-rot13="iynqn.frqynprx@znvy.zhav.pm" class="mail-href mail-inner">ENABLE@JAVASCRIPT</a> <a href="https://twitter.com/vlada_sedlacek" class="badge badge-primary"><i class="fab fa-twitter"></i> vlada_sedlacek</a></li>
+                </ul>
+            </section>
+
+            <section>
+                <h3 id="timeline"><a href="#timeline" class="perma" title="Permanent link"><i class="fas fa-clock fa-fw"></i></a> Timeline & Updates</h3>
+                <ul>
+                	<li><b>18.03.2019</b> - Vulnerability discovered.</li>
+                	<li><b>15.04.2019</b> - Vulnerability reported to NXP.</li>
+                	<li><b>11.07.2019</b> - Vulnerability reported to wolfSSL and MatrixSSL.</li>
+                	<li><b>12.07.2019</b> - Vulnerability reported to libgcrypt.</li>
+                	<li><b>25.07.2019</b> - Vulnerability reported to Crypto++.</li>
+                	<li><b>26.07.2019</b> - Vulnerability reported to Oracle.</li>
+			        <li><b>13.09.2019</b> - We published a SHA256 <a href="https://twitter.com/CRoCS_MUNI/status/1172499426931302402">hash</a> of an earlier version of this page to twitter.</li>
+			        <li><b>02.10.2019</b> - <span class="badge badge-success"><i class="fas fa-bullhorn"></i> Release</span> This website was published and the vulnerability disclosed on <a href="https://twitter.com/CRoCS_MUNI/status/1179392832299253761">our twitter</a>.</li>
+			        <li><b>03.10.2019</b> - Fixed an issue in the PoC which required the <code>g6k</code> package, which is not available for Python 3.</li>
+                    <li><b>03.10.2019</b> - Added a list of implementations we checked and deem secure.</li>
+                    <li><b>04.10.2019</b> - Fixed the status of <span class="tt">EdDSA</span> in <span class="tt">libgcrypt</span>.</li>
+                    <li><b>15.10.2019</b> - Oracle released a <a href="https://www.oracle.com/technetwork/security-advisory/cpuoct2019-5072832.html">Critical Patch Update</a> which claims to fix the issue in SunEC, 
+                    it does not, it disables the used of binary field curves by default in the Java TLS/SSL server. However, 
+                    users of the SunEC library through the default Java Cryptography Provider remain vulnerable 
+                    as well as users that setup their TLS/SSL server to allow and use binary field curves.</li>
+					<li><b>02.12.2019</b> - Removed <span class="tt">EdDSA</span> mentions from the page and added a disclaimer about its exploitability.</li>
+                    <li><b>15.06.2020</b> - Added a pre-print version of the paper. Updated the page to better align with the more polished content in the paper.</li>
+                </ul>
+            </section>
+
+            <section>
+                <h3 id="media"><a href="#media" class="perma" title="Permanent link"><i class="fas fa-newspaper fa-fw"></i></a> Media</h3>
+                <ul>
+                    <li><b>ZDNet</b>: <a href="https://www.zdnet.com/article/minerva-attack-can-recover-private-keys-from-smart-cards-cryptographic-libraries/" target="_blank">Minerva attack can recover private keys from smart cards, cryptographic libraries</a></li>
+		    <li><b>Golem.de</b>: <a href="https://www.golem.de/news/elliptische-kurven-minerva-angriff-zielt-auf-zertifizierte-krypto-chips-1910-144256.html" target="_blank">Minerva-Angriff zielt auf zertifizierte Krypto-Chips</a></li>
+                    <li><b>Daniel J. Bernstein</b>: <a href="https://blog.cr.yp.to/20191024-eddsa.html" target="_blank">Why EdDSA held up better than ECDSA against Minerva</a></li>
+                    <li><b>Feisty Duck</b>: <a href="https://www.feistyduck.com/bulletproof-tls-newsletter/issue_58_elliptic_curve_implementations_vulnerable_to_minerva_timing_attack" target="_blank">Elliptic curve implementations vulnerable to Minerva timing attack</a></li>
+                </ul>
+            </section>
+
+			<section>
+				<h3 id="acknowledgements"><a href="#acknowledgements" class="perma" title="Permanent link"><i class="fas fa-award fa-fw"></i></a> Acknowledgements</h3>
+				<p>Computational resources were supplied by the project "e-Infrastruktura CZ" (e-INFRA LM2018140) <a href="#metacentrum">[13]</a> provided within the program Projects of Large Research, Development and Innovations Infrastructures. This access was greatly appreciated.</p>
+			</section>
+
+            <hr/>
+            <section>
+                <h3 id="references"><a href="#references" class="perma" title="Permanent link"><i
+                        class="fas fa-book fa-fw"></i></a> References</h3>
+                <ol id="refs">
+                    <li id="hardness" class="reference">Dan Boneh, Ramarathnam Venkatesan: <cite>Hardness of computing the most
+                        significant bits of secret keys in Diffie-Hellman and related schemes</cite> (1996) <a
+                            href="https://crypto.stanford.edu/~dabo/abstracts/dhmsb.html">[pdf]</a></li>
+                    <li id="insecurity" class="reference">Phong Q. Nguyen, Igor E. Shparlinski: <cite>The Insecurity of the Digital
+                        Signature Algorithm with Partially Known Nonces</cite> (2002) <a
+                            href="https://doi.org/10.1007/s00145-002-0021-3">[DOI]</a></li>
+                    <li id="remote" class="reference">Billy B. Brumley, Nicola Tuveri: <cite>Remote Timing Attacks are Still
+                        Practical</cite> (2011) <a href="https://eprint.iacr.org/2011/232">[ePrint]</a></li>
+                    <li id="dark-side" class="reference">Phong Q. Nguyen: <cite>The Dark Side of the Hidden Number Problem: Lattice Attacks
+                        on DSA</cite> (2001) <a href="https://doi.org/10.1007/978-3-0348-8295-8_23">[DOI]</a></li>
+                    <li id="ooh-aah" class="reference">Naomi Benger, Joop van de Pol, Nigel P. Smart, Yuval Yarom:
+                        <cite>"Ooh Aah... Just a Little Bit" : A small amount of side channel can go a long way</cite> (2014)
+                        <a href="https://eprint.iacr.org/2014/161">[ePrint]</a></li>
+                    <li id="bit-more" class="reference">Joop van de Pol, Nigel P. Smart, Yuval Yarom: <cite>Just a Little Bit More</cite>
+                        (2015) <a href="https://eprint.iacr.org/2014/434">[ePrint]</a></li>
+                    <li id="rohnp" class="reference">Keegan Ryan: <cite>Return of the Hidden Number Problem: A widespread and novel key
+                        extraction attack on ECDSA and DSA</cite> (2018) <a href="https://doi.org/10.13154/tches.v2019.i1.146-168">[DOI]</a></li>
+                    <li id="cachequote" class="reference">Fergus Dall, Gabrielle De Micheli, Thomas Eisenbarth, Daniel Genkin,
+                        Nadia Heninger, Ahmad Moghimi, Yuval Yarom: <cite>CacheQuote: Efficiently Recovering Long-term Secrets of SGX EPID via Cache Attacks</cite> (2018)
+                        <a href="https://doi.org/10.13154/tches.v2018.i2.171-191">[DOI]</a></li>
+                    <li id="fido-ecdaa" class="reference">FIDO Alliance: <cite>FIDO ECDAA Algorithm</cite> (2018)
+                        <a href="https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-ecdaa-algorithm-v2.0-id-20180227.html">[spec]</a></li>
+                    <li id="fplll" class="reference">The FPLLL development team: <cite>fplll, a lattice reduction library</cite> (2016) <a
+                            href="https://github.com/fplll/fplll">[github]</a></li>
+                    <li id="athena" class="reference">NXP Semiconductors: <cite>NXP Acquires Athena SCS</cite> (2015) <a
+                            href="https://media.nxp.com/news-releases/news-release-details/nxp-acquires-athena-scs/">[release]</a></li>
+                    <li id="fips" class="reference">NIST: <cite>FIPS PUB 140-2: SECURITY REQUIREMENTS FOR CRYPTOGRAPHIC
+                        MODULES</cite> (2001) <a href="https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.140-2.pdf">[pdf]</a></li>
+                    <li id="metacentrum" class="reference">Metacentrum NGI <a href="https://www.metacentrum.cz/en/">[web]</a></li>
+                    <li id="tpm-fail" class="reference">Daniel Moghimi, Berk Sunar, Thomas Eisenbarth, Nadia Heninger: <cite>TPM-Fail: TPM meets Timing and Lattice Attacks</cite> (2019) <a href="https://tpm.fail">[web]</a></li>
+                </ol>
+            </section>
+
+        </div>
+        <hr/>
+        <footer>
+            Last update on 15.06.2020<!--TODO--> | 2019-2020 © <a href="https://crocs.fi.muni.cz">CRoCS</a> | <a href="assets/img/logo.svg">Logo</a> is <a
+                href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, font is <a href="https://scripts.sil.org/OFL">OFL</a>
+            licensed.
+        </footer>
+    </article>
+</div>
+<div>
+    <a title="Table of Contents" aria-label="Toggle Table of Contents" href="javascript:toc_toggle()">
+			<span id="toggle-toc-icon" class="fa-stack fa-lg">
+				<i class="fas fa-circle fa-stack-2x" aria-hidden="true"></i>
+				<i class="fas fa-chevron-right fa-stack-1x fa-inverse" aria-hidden="true"></i>
+			</span>
+    </a>
+</div>
+<div>
+    <a title="Back to top" aria-label="Back to top" href="#">
+			<span id="up-top-icon" class="fa-stack fa-lg">
+				<i class="fas fa-circle fa-stack-2x" aria-hidden="true"></i>
+				<i class="fas fa-chevron-up fa-stack-1x fa-inverse" aria-hidden="true"></i>
+			</span>
+    </a>
+</div>
+</body>
+</html>

@@ -1,0 +1,19 @@
+@font-face {
+    font-family: 'Exo';
+    src: local('Exo Black'), local('Exo-Black'),
+    url('Exo-Black.woff2') format('woff2'),
+    url('Exo-Black.ttf') format('truetype');
+    font-display: swap;
+    font-weight: 900;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Exo';
+    src: local('Exo Black Italic'), local('Exo-BlackItalic'),
+    url('Exo-BlackItalic.woff2') format('woff2'),
+    url('Exo-BlackItalic.ttf') format('truetype');
+    font-display: swap;
+    font-weight: 900;
+    font-style: italic;
+}
