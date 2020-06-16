@@ -94,6 +94,10 @@
     padding-right: 0.3em;
 }
 
+#middle #data-download td:nth-child(2), #middle #data-download td:nth-child(3), #middle #data-download td:nth-child(4) {
+    text-align: right;
+}
+
 #middle .definition {
     margin-top: 1em;
     margin-bottom: 1em;
@@ -208,9 +212,22 @@ a.perma:hover {
     text-align: left;
 }
 
+/*
+kbd {
+    background-color: #475059;
+}
+*/
+
+kbd {
+    color: black;
+    background-color: white;
+    font-family: "IBM Plex Mono", monospace;
+}
+
 
 code {
     color: #e62267;
+    font-family: "IBM Plex Mono", monospace;
 }
 
 span.tt {

@@ -148,6 +148,9 @@
                     <div class="col-sm d-flex justify-content-center mb-2">
                         <a href="#" style="width: 100%" role="button" class="btn btn-primary btn-lg disabled" title="To appear at CHES 2020."><i class="fas fa-file-alt"></i> TCHES 2020</a>
                     </div>
+                    <div class="col-sm d-flex justify-content-center mb-2">
+                        <a href="https://github.com/crocs-muni/minerva" style="width: 100%" role="button" class="btn btn-primary btn-lg"><i class="fab fa-github"></i> Code & data</a>
+                    </div>
                 </div>
                 <div class="mt-3">
                 <p><b style="font-weight: bold">Primary contact:</b> Jan Jancar <a data-rot13="w08al@znvy.zhav.pm" class="mail-href mail-inner">ENABLE@JAVASCRIPT</a> <!--<a href="https://twitter.com/j08ny" class="badge badge-primary"><i class="fab fa-twitter"></i> j08ny</a> <a href="https://twitter.com/CRoCS_MUNI" class="badge badge-primary"><i class="fab fa-twitter"></i> CRoCS_MUNI</a>--></p>
@@ -476,7 +479,7 @@
 
             <section>
                 <h3 id="poc"><a href="#poc" class="perma" title="Permanent link"><i class="fas fa-code fa-fw"></i></a> Proof of Concept</h3>
-                The tools can be downloaded from:
+                The tools and data can be downloaded from this page and also our <a href="https://github.com/crocs-muni/minerva" class="badge badge-primary"><i class="fab fa-github"></i> github</a>.
                 <table id="poc-download">
                     <thead>
                     <tr>
@@ -509,6 +512,13 @@
                         <td><a href="assets/tester.tar.gz.asc" title="tester.tar.gz.asc"><i class="fas fa-file-signature"></i> <span class="filename">sig</span></a></td>
                     </tr>
                     <tr>
+                        <td>Datasets</td>
+                        <td><a href="assets/data.zip" title="data.zip"><i class="fas fa-file-archive"></i> <span class="filename">data.zip</span></a></td>
+                        <td><a href="assets/data.zip.asc" title="data.zip.asc"><i class="fas fa-file-signature"></i> <span class="filename">sig</span></a></td>
+                        <td><a href="assets/data.tar.gz" title="data.tar.gz"><i class="fas fa-box-open"></i> <span class="filename">data.tar.gz</span></a></td>
+                        <td><a href="assets/data.tar.gz.asc" title="data.tar.gz.asc"><i class="fas fa-file-signature"></i> <span class="filename">sig</span></a></td>
+                    </tr>
+                    <tr>
                         <td>All of the above</td>
                         <td><a href="assets/all.zip"><i class="fas fa-file-archive"></i> <span class="filename">all.zip</span></a></td>
                         <td><a href="assets/all.zip.asc"><i class="fas fa-file-signature"></i> <span class="filename">sig</span></a></td>
@@ -520,12 +530,14 @@
 
                 <h4>Proof-of-Concept</h4>
 
-                <p>The Minerva proof-of-concept contains code that exploits the vulnerability against a JavaCard
-                    with a target applet, or against targets using several vulnerable libraries.</p>
+                <p>The Minerva proof-of-concept contains code that exploits the vulnerability against a JavaCard with a target applet,
+                    or against targets using several vulnerable libraries.</p>
 
                 <h5>Contents</h5>
 
-                <p><code>applet/</code> contains code of the target JavaCard applet. It generates an ECC keypair on the
+                <p><code>applet/</code> contains code of the two target JavaCard applets, the <code>CollectApplet</code> and the <code>POCApplet</code>.
+                    The applets are very similar, the only difference is that the <code>POCApplet</code> will never export its private key, so it can
+                    be used for full verification of the attack (if the private key is recovered and the device never exported it). It generates an ECC keypair on the
                     <code>secp256r1</code> curve in the <code>PREPARE</code> command and exports the public key in the response as well as the data
                     that will be signed. Then, in the <code>SIGN</code> command it signs the data using ECDSA with SHA256 and responds
                     with the signature. See <code>build.xml</code> for the ant build script.</p>
@@ -536,7 +548,8 @@
                     and CVP solving required for the attack. Both take parameters in the form of a JSON
                     file, which specified what kind of attack is to be performed, see the description in <code>attack.py</code>.
                     The offline attack takes as input a csv file produced by one of the targets or the collection
-                    script in <code>collect/</code> for the target JavaCard applet.</p>
+                    script in <code>collect/</code> for the target JavaCard applet. The <code>params.json</code> file can
+                    be used as a template to change some parameters internal to the attack or the PoC.</p>
 
                 <p><code>build/</code> is a directory created by the ant build which contains the CAP file with the
                     built JavaCard applet.</p>
@@ -552,43 +565,127 @@
                     and export the signatures with timing information in format ready for the offline attack script
                     <code>attack/attack.py</code>. See the Makefile for information on building.</p>
 
-                <h5>Usage with JavaCard</h5>
 
-                <ol>
-                    <li>Build the applet via <kbd>ant build</kbd>.</li>
-                    <li>Install the applet (<code>build/applet.cap</code>) on the card. For example
-                        using <a href="https://github.com/martinpaljak/GlobalPlatformPro" target="_blank">GlobalPlatformPro</a>, so
-                        doing <kbd>gp --install build/applet.cap</kbd>.</li>
-                    <li>Install Python packages from <code>requirements.txt</code> (into a virtualenv).
-                        Starting with <kbd>pip install Cython</kbd> first, as it is a build dependency of
-                        <code>fpylll</code>. <code>fpylll</code> has a somewhat more involved install process, see
-                        <a href="https://github.com/fplll/fpylll" target="_blank">https://github.com/fplll/fpylll</a>,
-                        you will need the current master version of <code>fpylll</code>.</li>
-                    <li>Run <kbd>./attack/poc.py</kbd>. If a USB reader is used, not using other
-                        USB devices during the attack makes it more reliable. Also, not using the machine
-                        for other computations during the attack limits the noise and makes it more reliable.</li>
-                    <li>Observe a new keypair being generated (the public key is exported from
-                        the card and printed) and the attack starting. Observe the reconstructed
-                        private key after around 10k-25k signatures. If the attack did not succeed
-                        after this time, it is likely that that particular run of the attack will
-                        not succeed at all, likely due to noise during the timing measurement.</li>
-                </ol>
+                <div class="card">
+                    <div class="card-header bg-light" id="poc-javacard-1-head">
+                        <h5 class="m-0">
+                            <button class="btn btn-dark" data-toggle="collapse" data-target="#poc-javacard-1-body"
+                                    aria-expanded="true" aria-controls="#poc-javacard-1-body" title="Toggle content">
+                                <i class="fas fa-fw fa-minus-square"></i> Usage with JavaCard (PoC)
+                            </button>
+                        </h5>
+                    </div>
 
-                <h5>Usage with libraries</h5>
+                    <div class="collapse custom-collapsible show" id="poc-javacard-1-body" aria-labelledby="poc-javacard-1-head">
+                        <div class="card-body">
+                            <ol>
+                                <li>Build the applet via <kbd>ant build</kbd>.</li>
+                                <li>Install the applet (<code>build/poc_applet.cap</code>) on the card. For example
+                                    using <a href="https://github.com/martinpaljak/GlobalPlatformPro" target="_blank">GlobalPlatformPro</a>, so
+                                    doing <kbd>gp --install build/poc_applet.cap</kbd>.</li>
+                                <li>Install Python packages from <code>requirements.txt</code> (into a virtualenv).
+                                    Starting with <kbd>pip install Cython</kbd> first, as it is a build dependency of
+                                    <code>fpylll</code>. <code>fpylll</code> has a somewhat more involved install process, see
+                                    <a href="https://github.com/fplll/fpylll" target="_blank">https://github.com/fplll/fpylll</a>,
+                                    you will need the current master version of <code>fpylll</code>.</li>
+                                <li>Run <kbd>./attack/poc.py</kbd>. If a USB reader is used, not using other
+                                    USB devices during the attack makes it more reliable. Also, not using the machine
+                                    for other computations during the attack limits the noise and makes it more reliable.</li>
+                                <li>Observe a new keypair being generated (the public key is exported from
+                                    the card and printed) and the attack starting. Observe the reconstructed
+                                    private key after around 10k-25k signatures. If the attack did not succeed
+                                    after this time, it is likely that that particular run of the attack will
+                                    not succeed at all, likely due to noise during the timing measurement.</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                <br/>
+                <div class="card">
+                    <div class="card-header bg-light" id="poc-javacard-2-head">
+                        <h5 class="m-0">
+                            <button class="btn btn-dark" data-toggle="collapse" data-target="#poc-javacard-2-body"
+                                    aria-expanded="false" aria-controls="#poc-javacard-2-body" title="Toggle content">
+                                <i class="fas fa-fw fa-plus-square"></i> Usage with JavaCard (Collect)
+                            </button>
+                        </h5>
+                    </div>
 
-                <ol>
-                    <li>Build the particular target app using the Makefile in the <code>target/</code> directory.</li>
-                    <li>Run the target, possibly with <a href="https://wiki.archlinux.org/index.php/CPU_frequency_scaling" target="_blank" title="CPU frequency scaling">frequency scaling</a> off,
-                        passing the arguments: the chosen curve, hash algorithm and amount of signatures requested. Save the
-                        output to a file.</li>
-                    <li>Install Python packages from <code>requirements.txt</code> (into a virtualenv).
-                        Starting with <kbd>pip install Cython</kbd> first, as it is a build dependency of
-                        <code>fpylll</code>. <code>fpylll</code> has a somewhat more involved install process, see
-                        <a href="https://github.com/fplll/fpylll" target="_blank">https://github.com/fplll/fpylll</a>,
-                        you will need the current master version of <code>fpylll</code>.</li>
-                    <li>Run <kbd>./attack/attack.py</kbd>, again passing the arguments: chosen curve, hash algorithm and filename
-                        containing the signatures from the target. Observe the reconstructed private key.</li>
-                </ol>
+                    <div class="collapse custom-collapsible" id="poc-javacard-2-body" aria-labelledby="poc-javacard-2-head">
+                        <div class="card-body">
+                            <ol>
+                                <li>Build the applet via <kbd>ant build</kbd>.</li>
+                                <li>Install the applet (<code>build/collect_applet.cap</code>) on the card. For example
+                                    using <a href="https://github.com/martinpaljak/GlobalPlatformPro" target="_blank">GlobalPlatformPro</a>, so
+                                    doing <kbd>gp --install build/collect_applet.cap</kbd>.</li>
+                                <li>Install Python packages from <code>requirements.txt</code> (into a virtualenv).
+                                    Starting with <kbd>pip install Cython</kbd> first, as it is a build dependency of
+                                    <code>fpylll</code>. <code>fpylll</code> has a somewhat more involved install process, see
+                                    <a href="https://github.com/fplll/fpylll" target="_blank">https://github.com/fplll/fpylll</a>,
+                                    you will need the current master version of <code>fpylll</code>.</li>
+                                <li>Run <kbd>./attack/collect.py</kbd>. If a USB reader is used, not using other
+                                    USB devices during the attack makes it more reliable. Also, not using the machine
+                                    for other computations during the attack limits the noise and makes it more reliable.</li>
+                                <li>Observe a new keypair being generated and signatures being performed
+                                    (the public key is exported from the card and printed, the private key is also exported in this mode).
+                                    Save the output of the <kbd>collect.py</kbd> script somewhere, it is in csv.</li>
+                                <li>Run <kbd>./attack/attack.py</kbd> passing the arguments <kbd>secp256r1 sha256</kbd> and a path to the collected file.
+                                    Observe the reconstructed private key.</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                <br/>
+                <div class="card">
+                    <div class="card-header bg-light" id="poc-libraries-head">
+                        <h5 class="m-0">
+                            <button class="btn btn-dark" data-toggle="collapse" data-target="#poc-libraries-body"
+                                    aria-expanded="false" aria-controls="#poc-libraries-body" title="Toggle content">
+                                <i class="fas fa-fw fa-plus-square"></i> Usage with libraries
+                            </button>
+                        </h5>
+                    </div>
+
+                    <div class="collapse custom-collapsible" id="poc-libraries-body" aria-labelledby="poc-libraries-head">
+                        <div class="card-body">
+                            <ol>
+                                <li>Build the particular target app using the Makefile in the <code>target/</code> directory.</li>
+                                <li>Run the target, possibly with <a href="https://wiki.archlinux.org/index.php/CPU_frequency_scaling" target="_blank" title="CPU frequency scaling">frequency scaling</a> off,
+                                    passing the arguments: the chosen curve, hash algorithm and amount of signatures requested. Save the
+                                    output to a file.</li>
+                                <li>Install Python packages from <code>requirements.txt</code> (into a virtualenv).
+                                    Starting with <kbd>pip install Cython</kbd> first, as it is a build dependency of
+                                    <code>fpylll</code>. <code>fpylll</code> has a somewhat more involved install process, see
+                                    <a href="https://github.com/fplll/fpylll" target="_blank">https://github.com/fplll/fpylll</a>,
+                                    you will need the current master version of <code>fpylll</code>.</li>
+                                <li>Run <kbd>./attack/attack.py</kbd>, again passing the arguments: chosen curve, hash algorithm and filename
+                                    containing the signatures from the target. Observe the reconstructed private key.</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                <br/>
+                <div class="card">
+                    <div class="card-header bg-light" id="poc-simulated-head">
+                        <h5 class="m-0">
+                            <button class="btn btn-dark" data-toggle="collapse" data-target="#poc-simulated-body"
+                                    aria-expanded="false" aria-controls="#poc-simulated-body" title="Toggle content">
+                                <i class="fas fa-fw fa-plus-square"></i> Usage with simulated data
+                            </button>
+                        </h5>
+                    </div>
+
+                    <div class="collapse custom-collapsible" id="poc-simulated-body" aria-labelledby="poc-simulated-head">
+                        <div class="card-body">
+                            <ol>
+                                <li>Run <kbd>./attack/simulate.py &lt;curve&gt; &lt;hash&gt; &lt;count&gt;</kbd> with optional parameters specifying the
+                                    leakage properties of the simulated target (<kbd>base</kbd>, <kbd>iter-time</kbd> and <kbd>sdev</kbd>) as modelled in the paper.</li>
+                                <li>Run <kbd>./attack/attack.py</kbd>, again passing the arguments: chosen curve, hash algorithm and filename containing the signatures from the target.
+                                    Observe the reconstructed private key.</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
 
                 <h4>CPLC checker</h4>
                 <p>The Minerva CPLC checker uses the Card Production Life Cycle (CPLC) data present on
@@ -640,6 +737,23 @@
                         can be taken as guidance that if ECDH leaks, ECDSA might as well (as is the case with
                         another card).</li>
                 </ol>
+
+                <h4>Datasets</h4>
+                <p>The datasets collected and used in the paper are available. They contain timing data collected from leaking implementations.
+                    The files <code>data_*.csv</code> contain data in a CSV-like format (only the first line is not CSV):</p>
+<pre class="listing">
+&lt;public key&gt; &lt;data&gt; &lt;private key&gt;
+&lt;r1&gt;,&lt;s1&gt;,&lt;time1&gt;
+&lt;r2&gt;,&lt;s2&gt;,&lt;time2&gt;
+...
+&lt;r&gt;,&lt;s&gt;,&lt;time&gt;
+</pre>
+                <p>Time is in nanoseconds. All of the datasets contain at least 50 000 signatures.</p>
+                <p>The <code>time_*.csv</code> files contain the processed data in a CSV format:</p>
+<pre class="listing">
+&lt;time&gt;,&lt;lzb&gt;
+</pre>
+                <p>In it, each line represents a signature which has <code>lzb</code> leading-zero bits and took <code>time</code> nanoseconds.</p>
 
             </section>
 
@@ -1046,7 +1160,7 @@
                 than the unknown information in the private key. The number of leading zero bits, which is equal to the used information in a signature in our attack, follows a truncated geometric
                 distribution with \(p = \frac{1}{2}\). Due to this, the expected amount of information in \(N\) signatures can be computed as
                 \(N \cdot \sum_{i=2}^{\lceil \log_2(n) \rceil} 2^{-l_i-1} \cdot l_i \approx \frac{3}{4}N\) assuming only signatures with \( l_i \geq 2 \) are used.
-                Adding inequalities with $l_i < 2$ generally does not help, as those will not lead to the desired vector being unusually close to a lattice point.</p>
+                Adding inequalities with \(l_i < 2\) generally does not help, as those will not lead to the desired vector being unusually close to a lattice point.</p>
 
                 <p>Using the above formula, we obtain the expected minimum of around \(N = 342\) signatures for a 256-bit private key.
                 Since the amount of information is linear in \(N\) it can be computed as \(N \approx \frac{4}{3} \cdot |K|\) for size \(|K|\) of the private key.
@@ -1085,10 +1199,9 @@
                     <thead>
                     <tr>
                         <td>Dataset</td>
-                        <td>\(base\)</td>
-                        <td>\(iter\_time\)</td>
-                        <td>\(sdev\)</td>
-                        <td>Download</td>
+                        <td>\(base (\mu s)\)</td>
+                        <td>\(iter\_time (\mu s)\)</td>
+                        <td>\(sdev (\mu s)\)</td>
                     </tr>
                     </thead>
                     <tr>
@@ -1096,28 +1209,24 @@
                         <td>0</td>
                         <td>1</td>
                         <td>0</td>
-                        <td><a href="assets/data/data_sim.csv"><i class="fas fa-file-alt"></i> csv</a></td>
                     </tr>
                     <tr>
                         <td><span class="tt">sw</span></td>
                         <td>453.4</td>
                         <td>12.7</td>
                         <td>17.2</td>
-                        <td><a href="assets/data/data_gcrypt.csv"><i class="fas fa-file-alt"></i> csv</a></td>
                     </tr>
                     <tr>
                         <td><span class="tt">tpm</span></td>
                         <td>27047.3</td>
                         <td>236.1</td>
                         <td>211.3</td>
-                        <td><a href="assets/data/data_tpmfail_stm.csv"><i class="fas fa-file-alt"></i> csv</a></td>
                     </tr>
                     <tr>
                         <td><span class="tt">card</span></td>
                         <td>43578.4</td>
                         <td>371.5</td>
                         <td>451.3</td>
-                        <td><a href="assets/data/data_athena.csv"><i class="fas fa-file-alt"></i> csv</a></td>
                     </tr>
                 </table>
 
@@ -1151,7 +1260,7 @@
                         </h5>
                     </div>
 
-                    <div class="collapse custom-collapsible show" id="evaluation-heatmaps-body" aria-labelledby="leakage-example-head">
+                    <div class="collapse custom-collapsible show" id="evaluation-heatmaps-body" aria-labelledby="evaluation-heatmaps-head">
                         <div class="card-body">
                             <a href="assets/img/const3.png" data-toggle="lightbox"><img
                                     src="assets/img/const3.png" id="heatmap-const-fig" class="figure"
