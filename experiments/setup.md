@@ -1,10 +1,13 @@
-# A log of the setup
+# A log of the setup on Metacentrum
 
 This is what it took to setup the libs, virt and stuff on [Metacentrum](https://metacentrum.cz/en/).
 
+Important to do this on Skirit and other similar frontends **NOT Zuphux**.
+
 ```
-module add python/3.8.0
+module add python/3.8.0-gcc
 module add gcc-8.3.0
+module add autoconf automake libtool
 python -m venv virt
 . virt/bin/activate
 
@@ -38,6 +41,7 @@ cd ..
 pip install Cython
 
 cd fpylll/fplll
+./autogen.sh
 ./configure --build=x86_64-pc-linux-gnu --prefix=/storage/brno3-cerit/home/j08ny/minerva/.local --with-gmp=/storage/brno3-cerit/home/j08ny/minerva/.local --with-mpfr=/storage/brno3-cerit/home/j08ny/minerva/.local --disable-static
 make -j8
 make install

@@ -45,5 +45,5 @@ if __name__ == "__main__":
         pt = k * curve.g
         r = int(pt.x)
         s = int(Mod(k, curve.group.n).inverse() * (hashed + r * private))
-        elapsed = args.base + args.t_time * k.bit_length() + int(noise_f())
+        elapsed = args.base + args.iter_time * k.bit_length() + int(noise_f())
         print(hex(r)[2:] + "," + hex(s)[2:] + "," + str(elapsed))
