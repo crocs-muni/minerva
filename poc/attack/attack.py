@@ -91,7 +91,12 @@ class Solver(Thread):
             return LLL.reduction(lattice)
         else:
             self.log("Start BKZ-{}.".format(block_size))
-            return BKZ.reduction(lattice, BKZ.Param(block_size=block_size, strategies=BKZ.DEFAULT_STRATEGY, auto_abort=True))
+            if self.curve.field.bit_length() > 384:
+                float_type = "ld"
+            else:
+                # Let the automatic stuff decide.
+                float_type = None
+            return BKZ.reduction(lattice, BKZ.Param(block_size=block_size, strategies=BKZ.DEFAULT_STRATEGY, auto_abort=True), float_type=float_type)
 
     def try_guess(self, guess, pubkey):
         """Check if `guess` or its negation is the private key corresponding to `pubkey`."""
